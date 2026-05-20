@@ -72,14 +72,14 @@ copy .env.example .env.local
 
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
-| `VITE_DEFAULT_LOCALE` | 可选语言数组，使用 JSON 数组配置，支持任意 BCP 47 语言区域代码；语言按钮会按数组顺序循环切换 | `["en-US","zh-CN"]` |
+| `VITE_DEFAULT_LOCALE` | 可选语言数组，使用 JSON 数组配置，默认覆盖全球常用语言，支持任意 BCP 47 语言区域代码；语言按钮会按数组顺序循环切换 | 全球常用语言数组 |
 | `VITE_APP_TITLE` | 顶部导航栏标题 | `iCloud+ Pricing` |
 | `VITE_HERO_TITLE` | 页面主标题 | `Global Pricing Matrix.` |
 | `VITE_HERO_SUBTITLE` | 页面副标题 | `Compare iCloud+ storage plans across different regions and currencies in real-time.` |
 
 > Vite 环境变量必须以 `VITE_` 开头。线上部署时可在 Vercel 项目设置的 `Environment Variables` 中配置。
 >
-> `VITE_DEFAULT_LOCALE` 示例：`["en-US","zh-CN","ja-JP","ko-KR","fr-FR","de-DE","es-ES","pt-BR","ru-RU","ar-SA","hi-IN","th-TH","vi-VN"]`。国家/地区名称会使用浏览器内置 `Intl.DisplayNames` 按当前语言自动本地化；界面固定文案目前提供中文和英文，其他语言会回退为英文。
+> `VITE_DEFAULT_LOCALE` 示例：`["en-US","zh-CN","zh-TW","ja-JP","ko-KR","fr-FR","de-DE","es-ES","it-IT","pt-BR","pt-PT","ru-RU","ar-SA","hi-IN","id-ID","ms-MY","th-TH","vi-VN","tr-TR","nl-NL","pl-PL","sv-SE","da-DK","no-NO","fi-FI","cs-CZ","hu-HU","ro-RO","el-GR","he-IL","uk-UA","sk-SK","hr-HR","bg-BG","ca-ES"]`。国家/地区名称会使用浏览器内置 `Intl.DisplayNames` 按当前语言自动本地化；界面固定文案目前提供中文和英文，其他语言会回退为英文。
 
 ## 服务端接口
 

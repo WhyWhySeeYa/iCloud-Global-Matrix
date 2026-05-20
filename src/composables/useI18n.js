@@ -4,7 +4,13 @@
  */
 import { computed, ref } from 'vue';
 
-const LOCALE_CONFIG = import.meta.env.VITE_DEFAULT_LOCALE || '["en-US","zh-CN"]';
+const GLOBAL_LOCALES = [
+  'en-US', 'zh-CN', 'zh-TW', 'ja-JP', 'ko-KR', 'fr-FR', 'de-DE', 'es-ES', 'it-IT', 'pt-BR',
+  'pt-PT', 'ru-RU', 'ar-SA', 'hi-IN', 'id-ID', 'ms-MY', 'th-TH', 'vi-VN', 'tr-TR', 'nl-NL',
+  'pl-PL', 'sv-SE', 'da-DK', 'no-NO', 'fi-FI', 'cs-CZ', 'hu-HU', 'ro-RO', 'el-GR', 'he-IL',
+  'uk-UA', 'sk-SK', 'hr-HR', 'bg-BG', 'ca-ES'
+];
+const LOCALE_CONFIG = import.meta.env.VITE_DEFAULT_LOCALE || JSON.stringify(GLOBAL_LOCALES);
 const STORAGE_KEY = 'icloud-pricing-locale';
 
 const messages = {
@@ -43,7 +49,7 @@ const messages = {
 };
 
 const parseLocaleConfig = (value) => {
-  if (!value) return ['en-US', 'zh-CN'];
+  if (!value) return GLOBAL_LOCALES;
 
   try {
     const parsed = JSON.parse(value);
@@ -66,7 +72,7 @@ const normalizeLocale = (locale) => {
 };
 
 const configuredLocales = [...new Set(parseLocaleConfig(LOCALE_CONFIG).map(normalizeLocale))];
-const supportedLocales = configuredLocales.length > 0 ? configuredLocales : ['en-US', 'zh-CN'];
+const supportedLocales = configuredLocales.length > 0 ? configuredLocales : GLOBAL_LOCALES;
 
 const getMessageLocale = (value) => {
   const normalized = normalizeLocale(value).toLowerCase();
@@ -76,10 +82,10 @@ const getMessageLocale = (value) => {
 
 const getLocaleLabel = (value) => {
   const normalized = normalizeLocale(value);
-  const messageLocale = getMessageLocale(normalized);
+  const lowerLocale = normalized.toLowerCase();
 
-  if (messageLocale === 'zh') return '中文';
-  if (messageLocale === 'en') return 'English';
+  if (lowerLocale.startsWith('zh')) return '中文';
+  if (lowerLocale.startsWith('en')) return 'English';
 
   const languageNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'language' });
   const [language] = normalized.split('-');
