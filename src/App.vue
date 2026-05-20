@@ -3,10 +3,11 @@
  * @file App.vue
  * @description 主应用组件，负责视图渲染和组合各个业务逻辑 Hook
  */
-import { ref, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useTheme } from './composables/useTheme.js';
 import { usePricingData } from './composables/usePricingData.js';
 import { useExport } from './composables/useExport.js';
+import { useI18n } from './composables/useI18n.js';
 
 // 组件引入
 import AppHeader from './components/AppHeader.vue';
@@ -17,10 +18,22 @@ const tableContainer = ref(null); // 表格 DOM 容器的引用，用于截图�
 
 // --- 组合式 API (Hooks) 引入 ---
 
-// 1. 主题管理逻辑
+// 1. 多语言翻译逻辑
+const { locale, currentLocaleLabel, t, toggleLocale } = useI18n();
+
+// 2. 主题管理逻辑
 const { isDark, toggleTheme } = useTheme();
 
-// 2. 核心业务数据逻辑 (获取、解析、排序)
+const appTitle = computed(() => import.meta.env.VITE_APP_TITLE || t('appTitle'));
+const heroTitle = computed(() => import.meta.env.VITE_HERO_TITLE || t('heroTitle'));
+const heroSubtitle = computed(() => import.meta.env.VITE_HERO_SUBTITLE || t('heroSubtitle'));
+const pricingTableLabels = computed(() => ({
+  region: t('region'),
+  currency: t('currency'),
+  bestPrice: t('bestPrice')
+}));
+
+// 3. 核心业务数据逻辑 (获取、解析、排序)
 const { 
   loading, 
   loadingText, 
@@ -31,9 +44,9 @@ const {
   bestPrices, 
   fetchData, 
   toggleSort 
-} = usePricingData();
+} = usePricingData(t);
 
-// 3. 导出图片逻辑
+// 4. 导出图片逻辑
 const { saveAsImage } = useExport();
 
 /**
@@ -66,16 +79,21 @@ onMounted(() => {
     
     <!-- 顶部导航栏 -->
     <AppHeader 
-      :is-dark="isDark" 
-      @toggle-theme="toggleTheme" 
-      @export="handleExport" 
+      :is-dark="isDark"
+      :app-title="appTitle"
+      :export-label="t('export')"
+      :theme-title="isDark ? t('switchToLight') : t('switchToDark')"
+      :locale-label="currentLocaleLabel"
+      @toggle-theme="toggleTheme"
+      @toggle-locale="toggleLocale"
+      @export="handleExport"
     />
 
     <main class="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       <!-- 页面标题区域 -->
       <div class="text-center mb-8 md:mb-12">
-        <h2 class="text-2xl md:text-5xl font-bold tracking-tight text-[#1d1d1f] dark:text-white mb-3 md:mb-4">Global Pricing Matrix.</h2>
-        <p class="text-sm md:text-lg text-[#86868b] max-w-2xl mx-auto">Compare iCloud+ storage plans across different regions and currencies in real-time.</p>
+        <h2 class="text-2xl md:text-5xl font-bold tracking-tight text-[#1d1d1f] dark:text-white mb-3 md:mb-4">{{ heroTitle }}</h2>
+        <p class="text-sm md:text-lg text-[#86868b] max-w-2xl mx-auto">{{ heroSubtitle }}</p>
       </div>
 
       <!-- 价格表格区域 (用于截图导出的容器) -->
@@ -88,14 +106,15 @@ onMounted(() => {
           :sort-tier="sortTier"
           :is-asc="isAsc"
           :best-prices="bestPrices"
+          :labels="pricingTableLabels"
           @toggle-sort="toggleSort"
         />
       </div>
 
       <!-- 底部页脚 -->
       <footer class="mt-12 pb-8 text-center text-xs text-[#86868b]">
-        <p>Data Source: Apple Official Support • Exchange Rates: Open ER API</p>
-        <p class="mt-1">Last Updated: {{ new Date().toLocaleTimeString() }}</p>
+        <p>{{ t('dataSource') }}</p>
+        <p class="mt-1">{{ t('lastUpdated') }}: {{ new Date().toLocaleTimeString(locale === 'zh' ? 'zh-CN' : 'en-US') }}</p>
       </footer>
     </main>
   </div>

@@ -60,6 +60,25 @@ npm run build
 dist
 ```
 
+## 环境变量
+
+复制示例文件后按需修改：
+
+```bash
+copy .env.example .env.local
+```
+
+可配置项：
+
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `VITE_DEFAULT_LOCALE` | 默认语言，支持 `en` 或 `zh` | `en` |
+| `VITE_APP_TITLE` | 顶部导航栏标题 | `iCloud+ Pricing` |
+| `VITE_HERO_TITLE` | 页面主标题 | `Global Pricing Matrix.` |
+| `VITE_HERO_SUBTITLE` | 页面副标题 | `Compare iCloud+ storage plans across different regions and currencies in real-time.` |
+
+> Vite 环境变量必须以 `VITE_` 开头。线上部署时可在 Vercel 项目设置的 `Environment Variables` 中配置。
+
 ## 服务端接口
 
 服务端接口文件：

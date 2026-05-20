@@ -6,11 +6,11 @@ import { ref, computed } from 'vue';
 import { STORAGE_TIERS } from '../config/constants.js';
 import { fetchPricingData } from '../api/index.js';
 
-export function usePricingData() {
+export function usePricingData(t) {
   // --- 响应式状态 ---
   const rawData = ref([]); // 原始解析数据
   const loading = ref(true); // 加载状态
-  const loadingText = ref('INITIALIZING SYSTEM...'); // 加载提示
+  const loadingText = ref(t('initializing')); // 加载提示
   const error = ref(null); // 错误信息
 
   // --- 排序状态 ---
@@ -26,12 +26,12 @@ export function usePricingData() {
     
     try {
       // 1. 从服务端获取已经抓取、解析并计算好的价格数据
-      loadingText.value = 'FETCHING PRICING DATA...';
+      loadingText.value = t('fetchingPricingData');
       rawData.value = await fetchPricingData();
       
     } catch (err) {
       console.error('数据处理失败:', err);
-      error.value = "DATA FETCH FAILED. CHECK NETWORK OR USE LOCAL SOURCE.";
+      error.value = t('dataFetchFailed');
     } finally {
       loading.value = false;
     }

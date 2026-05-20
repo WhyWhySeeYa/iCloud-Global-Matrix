@@ -33,6 +33,10 @@ const props = defineProps({
   bestPrices: {
     type: Object,
     required: true
+  },
+  labels: {
+    type: Object,
+    required: true
   }
 });
 
@@ -57,7 +61,7 @@ const emit = defineEmits(['toggle-sort']);
   <!-- Data Table -->
   <div v-else class="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4">
     <el-table :data="data" style="width: 100%" :row-class-name="() => 'transition-colors'">
-      <el-table-column fixed prop="CountryZH" label="Region" min-width="120">
+      <el-table-column fixed prop="CountryZH" :label="labels.region" min-width="120">
         <template #default="scope">
           <div class="flex items-center gap-2 md:gap-3">
             <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ scope.$index + 1 }}</span>
@@ -69,7 +73,7 @@ const emit = defineEmits(['toggle-sort']);
         </template>
       </el-table-column>
       
-      <el-table-column prop="Currency" label="Currency" align="center" min-width="120">
+      <el-table-column prop="Currency" :label="labels.currency" align="center" min-width="120">
         <template #default="scope">
           <span class="text-xs text-[#86868b]">{{ scope.row.Currency }}</span>
         </template>
@@ -99,7 +103,7 @@ const emit = defineEmits(['toggle-sort']);
               </span>
               
               <span v-if="scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY === bestPrices[tier]"
-                    class="flex h-1.5 w-1.5 rounded-full bg-[#0071e3]" title="Best Price">
+                    class="flex h-1.5 w-1.5 rounded-full bg-[#0071e3]" :title="labels.bestPrice">
               </span>
             </div>
             
