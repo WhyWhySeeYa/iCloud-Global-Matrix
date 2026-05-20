@@ -14,7 +14,12 @@ const downloadBlob = (content, filename, type) => {
   URL.revokeObjectURL(url);
 };
 
-const escapeCsvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+const normalizeCsvCell = (value) => {
+  const text = String(value ?? '').replace(/\r?\n/g, ' ').trim();
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+};
+
+const escapeCsvCell = (value) => `"${normalizeCsvCell(value).replace(/"/g, '""')}"`;
 
 export function useExport() {
   /**
@@ -87,9 +92,9 @@ export function useExport() {
     });
 
     downloadBlob(
-      [headers.map(escapeCsvCell).join(','), ...rows].join('\n'),
+      `\uFEFFsep=,\r\n${[headers.map(escapeCsvCell).join(','), ...rows].join('\r\n')}`,
       `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.csv`,
-      'text/csv;charset=utf-8'
+      'text/csv;charset=utf-8-sig'
     );
   };
 
