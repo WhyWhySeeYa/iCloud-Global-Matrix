@@ -76,13 +76,14 @@ const getMessageLocale = (value) => {
 
 const getLocaleLabel = (value) => {
   const normalized = normalizeLocale(value);
-  const languageNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'language' });
-  const regionNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'region' });
-  const [language, region] = normalized.split('-');
-  const languageLabel = languageNames.of(language) || normalized;
-  const regionLabel = region ? regionNames.of(region) : '';
+  const messageLocale = getMessageLocale(normalized);
 
-  return regionLabel ? `${languageLabel} · ${regionLabel}` : languageLabel;
+  if (messageLocale === 'zh') return '中文';
+  if (messageLocale === 'en') return 'English';
+
+  const languageNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'language' });
+  const [language] = normalized.split('-');
+  return languageNames.of(language) || normalized;
 };
 
 const getInitialLocale = () => {
