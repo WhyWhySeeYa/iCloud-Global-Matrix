@@ -103,8 +103,11 @@ const parsePricingHtml = (htmlString, rates) => {
   const countryHeaderRegex = /^([^（(0-9]+?)\d*\s*[（(]([^）)]+)[）)]\s*$/;
   const countryHeaderPrefixRegex = /^([^（(0-9]+?)\d*\s*[（(]([^）)]+)[）)]\s*/;
   const singlePlanLineRegex = /^(50GB|200GB|2TB|6TB|12TB)\s*[：:]\s*(.+)$/;
+  const planNameOnlyRegex = /^(50GB|200GB|2TB|6TB|12TB)$/;
+  const priceOnlyRegex = /^\s*[：:]\s*(.+)$/;
   const planSegmentRegex = /(50GB|200GB|2TB|6TB|12TB)\s*[：:]\s*([^：:]+?)(?=(?:50GB|200GB|2TB|6TB|12TB)\s*[：:]|$)/g;
   let current = null;
+  let pendingPlanName = null;
   let countryIdCounter = 1;
   let planIdCounter = 1;
 
@@ -120,6 +123,7 @@ const parsePricingHtml = (htmlString, rates) => {
     if (countryPrefixMatch) {
       flushCurrent();
       current = createCountryRecord(countryPrefixMatch, countryIdCounter++);
+      pendingPlanName = null;
 
       const rest = exactCountryMatch ? '' : line.slice(countryPrefixMatch[0].length).trim();
       for (const planMatch of rest.matchAll(planSegmentRegex)) {
@@ -134,11 +138,31 @@ const parsePricingHtml = (htmlString, rates) => {
     const singlePlanMatch = line.match(singlePlanLineRegex);
     if (singlePlanMatch) {
       planIdCounter = addPlan(current, singlePlanMatch[1], singlePlanMatch[2], rates, planIdCounter);
+      pendingPlanName = null;
       continue;
     }
 
+    const planNameOnlyMatch = line.match(planNameOnlyRegex);
+    if (planNameOnlyMatch) {
+      pendingPlanName = planNameOnlyMatch[1];
+      continue;
+    }
+
+    const priceOnlyMatch = line.match(priceOnlyRegex);
+    if (pendingPlanName && priceOnlyMatch) {
+      planIdCounter = addPlan(current, pendingPlanName, priceOnlyMatch[1], rates, planIdCounter);
+      pendingPlanName = null;
+      continue;
+    }
+
+    let matchedSegment = false;
     for (const planMatch of line.matchAll(planSegmentRegex)) {
       planIdCounter = addPlan(current, planMatch[1], planMatch[2], rates, planIdCounter);
+      matchedSegment = true;
+    }
+
+    if (matchedSegment) {
+      pendingPlanName = null;
     }
   }
 
