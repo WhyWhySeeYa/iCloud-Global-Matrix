@@ -1,10 +1,10 @@
 /**
  * @file useI18n.js
- * @description 简单多语言翻译 Hook，支持通过环境变量设置默认语言
+ * @description 多语言翻译 Hook，支持通过环境变量数组配置可选语言区域
  */
 import { computed, ref } from 'vue';
 
-const DEFAULT_LOCALE = import.meta.env.VITE_DEFAULT_LOCALE || 'en';
+const LOCALE_CONFIG = import.meta.env.VITE_DEFAULT_LOCALE || '["en-US","zh-CN"]';
 const STORAGE_KEY = 'icloud-pricing-locale';
 
 const messages = {
@@ -42,35 +42,92 @@ const messages = {
   }
 };
 
+const parseLocaleConfig = (value) => {
+  if (!value) return ['en-US', 'zh-CN'];
+
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // 兼容 VITE_DEFAULT_LOCALE=en-US,zh-CN 这种写法
+  }
+
+  return value.split(',');
+};
+
 const normalizeLocale = (locale) => {
-  if (!locale) return 'en';
-  const normalized = locale.toLowerCase();
+  const normalized = String(locale || 'en-US').trim().replace('_', '-');
+
+  try {
+    return Intl.getCanonicalLocales(normalized)[0] || 'en-US';
+  } catch {
+    return 'en-US';
+  }
+};
+
+const configuredLocales = [...new Set(parseLocaleConfig(LOCALE_CONFIG).map(normalizeLocale))];
+const supportedLocales = configuredLocales.length > 0 ? configuredLocales : ['en-US', 'zh-CN'];
+
+const getMessageLocale = (value) => {
+  const normalized = normalizeLocale(value).toLowerCase();
   if (normalized.startsWith('zh')) return 'zh';
   return 'en';
 };
 
-const initialLocale = normalizeLocale(
-  localStorage.getItem(STORAGE_KEY) || DEFAULT_LOCALE || navigator.language
-);
+const getLocaleLabel = (value) => {
+  const normalized = normalizeLocale(value);
+  const languageNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'language' });
+  const regionNames = new Intl.DisplayNames([normalized, 'en-US'], { type: 'region' });
+  const [language, region] = normalized.split('-');
+  const languageLabel = languageNames.of(language) || normalized;
+  const regionLabel = region ? regionNames.of(region) : '';
 
-const locale = ref(initialLocale);
+  return regionLabel ? `${languageLabel} · ${regionLabel}` : languageLabel;
+};
+
+const getInitialLocale = () => {
+  const savedLocale = localStorage.getItem(STORAGE_KEY);
+  const browserLocale = navigator.language;
+  const candidates = [savedLocale, browserLocale, ...supportedLocales].filter(Boolean).map(normalizeLocale);
+
+  return candidates.find((candidate) => supportedLocales.includes(candidate)) || supportedLocales[0];
+};
+
+const locale = ref(getInitialLocale());
 
 export function useI18n() {
-  const availableLocales = [
-    { value: 'en', label: 'English' },
-    { value: 'zh', label: '中文' }
-  ];
+  const availableLocales = supportedLocales.map((value) => ({
+    value,
+    label: getLocaleLabel(value)
+  }));
 
-  const t = (key) => messages[locale.value]?.[key] || messages.en[key] || key;
+  const t = (key) => {
+    const messageLocale = getMessageLocale(locale.value);
+    return messages[messageLocale]?.[key] || messages.en[key] || key;
+  };
+
+  const localizeRegion = (countryISO, fallbackName) => {
+    if (!countryISO || countryISO === 'UN') return fallbackName;
+
+    try {
+      const regionNames = new Intl.DisplayNames([locale.value, 'en-US'], { type: 'region' });
+      return regionNames.of(countryISO) || fallbackName;
+    } catch {
+      return fallbackName;
+    }
+  };
 
   const setLocale = (nextLocale) => {
-    locale.value = normalizeLocale(nextLocale);
+    const normalized = normalizeLocale(nextLocale);
+    locale.value = supportedLocales.includes(normalized) ? normalized : supportedLocales[0];
     localStorage.setItem(STORAGE_KEY, locale.value);
-    document.documentElement.lang = locale.value === 'zh' ? 'zh-CN' : 'en';
+    document.documentElement.lang = locale.value;
   };
 
   const toggleLocale = () => {
-    setLocale(locale.value === 'zh' ? 'en' : 'zh');
+    const currentIndex = supportedLocales.indexOf(locale.value);
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % supportedLocales.length : 0;
+    setLocale(supportedLocales[nextIndex]);
   };
 
   setLocale(locale.value);
@@ -78,8 +135,9 @@ export function useI18n() {
   return {
     locale,
     availableLocales,
-    currentLocaleLabel: computed(() => availableLocales.find((item) => item.value === locale.value)?.label || 'English'),
+    currentLocaleLabel: computed(() => availableLocales.find((item) => item.value === locale.value)?.label || locale.value),
     t,
+    localizeRegion,
     setLocale,
     toggleLocale
   };

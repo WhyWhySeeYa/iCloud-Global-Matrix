@@ -66,8 +66,8 @@ const emit = defineEmits(['toggle-sort']);
           <div class="flex items-center gap-2 md:gap-3">
             <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ scope.$index + 1 }}</span>
             <div class="flex flex-col min-w-0">
-              <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.CountryZH }}</span>
-              <span class="text-[10px] text-[#86868b] truncate">{{ scope.row.Country }}</span>
+              <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.LocalizedCountryZH || scope.row.CountryZH }}</span>
+              <span class="text-[10px] text-[#86868b] truncate">{{ scope.row.LocalizedCountry || scope.row.Country }}</span>
             </div>
           </div>
         </template>
