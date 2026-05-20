@@ -4,6 +4,18 @@
  */
 import html2canvas from 'html2canvas';
 
+const downloadBlob = (content, filename, type) => {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const escapeCsvCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
 export function useExport() {
   /**
    * 将指定的 DOM 容器导出为 PNG 图片
@@ -63,7 +75,35 @@ export function useExport() {
     }
   };
 
+  const saveAsCsv = (data, tiers) => {
+    const headers = ['Region', 'RegionZH', 'ISO', 'Currency', ...tiers.flatMap((tier) => [`${tier} Price`, `${tier} CNY`])];
+    const rows = data.map((country) => {
+      const values = [country.Country, country.CountryZH, country.CountryISO, country.Currency];
+      tiers.forEach((tier) => {
+        const plan = country.Plans.find((item) => item.Name === tier);
+        values.push(plan?.Price || '', plan?.PriceInCNY || '');
+      });
+      return values.map(escapeCsvCell).join(',');
+    });
+
+    downloadBlob(
+      [headers.map(escapeCsvCell).join(','), ...rows].join('\n'),
+      `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.csv`,
+      'text/csv;charset=utf-8'
+    );
+  };
+
+  const saveAsJson = (data) => {
+    downloadBlob(
+      JSON.stringify(data, null, 2),
+      `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.json`,
+      'application/json;charset=utf-8'
+    );
+  };
+
   return {
-    saveAsImage
+    saveAsImage,
+    saveAsCsv,
+    saveAsJson
   };
 }

@@ -12,6 +12,7 @@ export function usePricingData(t) {
   const loading = ref(true); // 加载状态
   const loadingText = ref(t('initializing')); // 加载提示
   const error = ref(null); // 错误信息
+  const meta = ref(null); // 服务端数据元信息
 
   // --- 排序状态 ---
   const sortTier = ref('50GB'); // 当前排序层级
@@ -27,7 +28,9 @@ export function usePricingData(t) {
     try {
       // 1. 从服务端获取已经抓取、解析并计算好的价格数据
       loadingText.value = t('fetchingPricingData');
-      rawData.value = await fetchPricingData();
+      const payload = await fetchPricingData();
+      rawData.value = payload.data;
+      meta.value = payload.meta;
       
     } catch (err) {
       console.error('数据处理失败:', err);
@@ -87,6 +90,7 @@ export function usePricingData(t) {
     isAsc,
     sortedData,
     bestPrices,
+    meta,
     fetchData,
     toggleSort
   };

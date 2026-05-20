@@ -1,5 +1,9 @@
+import { FALLBACK_UPDATED_AT, fallbackPricingData } from './fallback-pricing.js';
+
 const APPLE_PRICING_URL = 'https://support.apple.com/zh-cn/108047';
 const EXCHANGE_RATE_URL = 'https://open.er-api.com/v6/latest/CNY';
+const MEMORY_CACHE_TTL = 1000 * 60 * 60 * 6;
+const STALE_CACHE_TTL = 1000 * 60 * 60 * 24;
 const APPLE_PRICING_FALLBACK_URLS = [
   APPLE_PRICING_URL,
   `https://corsproxy.io/?${encodeURIComponent(APPLE_PRICING_URL)}`,
@@ -7,6 +11,58 @@ const APPLE_PRICING_FALLBACK_URLS = [
 ];
 
 const STORAGE_TIERS = ['50GB', '200GB', '2TB', '6TB', '12TB'];
+
+let memoryCache = null;
+
+const cloneData = (data) => JSON.parse(JSON.stringify(data));
+
+const createResponsePayload = (data, meta = {}) => ({
+  data,
+  updatedAt: meta.updatedAt || new Date().toISOString(),
+  source: APPLE_PRICING_URL,
+  resolvedSource: meta.resolvedSource || APPLE_PRICING_URL,
+  cacheStatus: meta.cacheStatus || 'fresh',
+  isFallback: Boolean(meta.isFallback),
+  message: meta.message || null
+});
+
+const getValidCache = () => {
+  if (!memoryCache) return null;
+
+  const age = Date.now() - memoryCache.cachedAt;
+  if (age <= MEMORY_CACHE_TTL) {
+    return {
+      ...memoryCache.payload,
+      cacheStatus: 'memory',
+      cacheAgeSeconds: Math.round(age / 1000)
+    };
+  }
+
+  return null;
+};
+
+const getStaleCache = () => {
+  if (!memoryCache) return null;
+
+  const age = Date.now() - memoryCache.cachedAt;
+  if (age <= MEMORY_CACHE_TTL + STALE_CACHE_TTL) {
+    return {
+      ...memoryCache.payload,
+      cacheStatus: 'stale',
+      cacheAgeSeconds: Math.round(age / 1000),
+      message: 'Live pricing fetch failed. Serving stale cached data.'
+    };
+  }
+
+  return null;
+};
+
+const setMemoryCache = (payload) => {
+  memoryCache = {
+    cachedAt: Date.now(),
+    payload
+  };
+};
 
 const countryMap = {
   '巴哈马': { iso: 'BS', en: 'Bahamas' }, '巴巴多斯': { iso: 'BB', en: 'Barbados' }, '巴西': { iso: 'BR', en: 'Brazil' }, '加拿大': { iso: 'CA', en: 'Canada' },
@@ -225,6 +281,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  const cachedPayload = getValidCache();
+  if (cachedPayload) {
+    res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+    return res.status(200).json(cachedPayload);
+  }
+
   try {
     const [rateData, applePricing] = await Promise.all([
       fetchJson(EXCHANGE_RATE_URL),
@@ -237,18 +299,32 @@ export default async function handler(req, res) {
       throw new Error('Apple pricing page parsed successfully but no pricing data was found.');
     }
 
-    res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
-    return res.status(200).json({
-      data,
+    const payload = createResponsePayload(data, {
       updatedAt: new Date().toISOString(),
-      source: APPLE_PRICING_URL,
-      resolvedSource: applePricing.sourceUrl
+      resolvedSource: applePricing.sourceUrl,
+      cacheStatus: 'fresh'
     });
+
+    setMemoryCache(payload);
+    res.setHeader('Cache-Control', 's-maxage=21600, stale-while-revalidate=86400');
+    return res.status(200).json(payload);
   } catch (error) {
     console.error('Failed to load pricing data:', error);
-    return res.status(500).json({
-      error: 'Failed to load pricing data.',
-      message: error.message
+
+    const stalePayload = getStaleCache();
+    if (stalePayload) {
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
+      return res.status(200).json(stalePayload);
+    }
+
+    const fallbackPayload = createResponsePayload(cloneData(fallbackPricingData), {
+      updatedAt: FALLBACK_UPDATED_AT,
+      cacheStatus: 'fallback',
+      isFallback: true,
+      message: `Live pricing fetch failed. Serving bundled fallback data. ${error.message}`
     });
+
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
+    return res.status(200).json(fallbackPayload);
   }
 }

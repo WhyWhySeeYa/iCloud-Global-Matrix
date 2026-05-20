@@ -1,8 +1,9 @@
 <script setup>
 /**
  * @file PricingTable.vue
- * @description 价格展示表格组件，负责渲染数据、处理排序和高亮显示
+ * @description 价格展示表格组件，负责渲染数据、筛选、排序和高亮显示
  */
+import { computed, ref } from 'vue';
 import { STORAGE_TIERS } from '../config/constants.js';
 
 const props = defineProps({
@@ -40,7 +41,42 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['toggle-sort']);
+const emit = defineEmits(['toggle-sort', 'export-csv', 'export-json']);
+
+const searchKeyword = ref('');
+const selectedTier = ref('all');
+const selectedCurrency = ref('all');
+const onlyBestPrices = ref(false);
+
+const currencyOptions = computed(() => [...new Set(props.data.map((item) => item.Currency).filter(Boolean))].sort());
+
+const filteredData = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase();
+
+  return props.data.filter((country) => {
+    const matchedKeyword = !keyword || [
+      country.Country,
+      country.CountryZH,
+      country.LocalizedCountry,
+      country.LocalizedCountryZH,
+      country.CountryISO,
+      country.Currency
+    ].some((value) => String(value || '').toLowerCase().includes(keyword));
+
+    const matchedCurrency = selectedCurrency.value === 'all' || country.Currency === selectedCurrency.value;
+    const matchedTier = selectedTier.value === 'all' || country.Plans.some((plan) => plan.Name === selectedTier.value);
+    const matchedBest = !onlyBestPrices.value || country.Plans.some((plan) => plan.PriceInCNY === props.bestPrices[plan.Name]);
+
+    return matchedKeyword && matchedCurrency && matchedTier && matchedBest;
+  });
+});
+
+const resetFilters = () => {
+  searchKeyword.value = '';
+  selectedTier.value = 'all';
+  selectedCurrency.value = 'all';
+  onlyBestPrices.value = false;
+};
 </script>
 
 <template>
@@ -60,7 +96,31 @@ const emit = defineEmits(['toggle-sort']);
 
   <!-- Data Table -->
   <div v-else class="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4">
-    <el-table :data="data" style="width: 100%" :row-class-name="() => 'transition-colors'">
+    <div class="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
+      <div class="flex flex-col sm:flex-row gap-2 flex-1">
+        <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="max-w-full sm:max-w-64" />
+        <el-select v-model="selectedTier" class="w-full sm:w-36">
+          <el-option value="all" :label="labels.allPlans" />
+          <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
+        </el-select>
+        <el-select v-model="selectedCurrency" filterable class="w-full sm:w-40">
+          <el-option value="all" :label="labels.allCurrencies" />
+          <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
+        </el-select>
+        <el-checkbox v-model="onlyBestPrices" class="!mr-0">{{ labels.onlyBestPrices }}</el-checkbox>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 text-xs text-[#86868b]">
+        <span>{{ labels.visibleRows }}: {{ filteredData.length }} / {{ labels.totalRows }}: {{ data.length }}</span>
+        <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
+        <button class="btn-filter-action" @click="emit('export-csv')">{{ labels.exportCsv }}</button>
+        <button class="btn-filter-action" @click="emit('export-json')">{{ labels.exportJson }}</button>
+      </div>
+    </div>
+
+    <el-empty v-if="filteredData.length === 0" :description="labels.noMatchingData" />
+
+    <el-table v-else :data="filteredData" style="width: 100%" :row-class-name="() => 'transition-colors'">
       <el-table-column fixed prop="CountryZH" :label="labels.region" min-width="120">
         <template #default="scope">
           <div class="flex items-center gap-2 md:gap-3">
@@ -121,6 +181,10 @@ const emit = defineEmits(['toggle-sort']);
 </template>
 
 <style scoped>
+.btn-filter-action {
+  @apply px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white transition-colors;
+}
+
 :deep(.el-table) {
   --el-table-border-color: transparent;
   --el-table-header-bg-color: #ffffff;

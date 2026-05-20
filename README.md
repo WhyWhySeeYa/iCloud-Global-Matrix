@@ -7,9 +7,11 @@
 - 展示不同国家/地区的 iCloud+ 存储套餐价格
 - 自动换算人民币价格
 - 支持按容量套餐排序
+- 支持地区/货币搜索筛选、套餐筛选和最低价筛选
 - 支持暗色/亮色主题切换
-- 支持导出价格表图片
+- 支持导出价格表图片、CSV 和 JSON
 - 通过 Vercel Serverless Function 在服务端抓取和解析价格数据
+- 支持服务端内存缓存、过期缓存兜底和内置兜底价格数据
 
 ## 技术栈
 
@@ -46,7 +48,7 @@ Vercel CLI 启动后通常会提供类似下面的地址：
 http://localhost:3000
 ```
 
-> 注意：普通 `npm run dev` 只会启动 Vite 前端开发服务器，不会执行 Vercel Serverless Function。调试 `/api/pricing` 时必须使用 `npm run dev:vercel`。
+> 注意：当前项目已在 `vite.config.js` 中接入本地 API 中间件，普通 `npm run dev` 也可以访问 `/api/pricing` 和 `/api/health`。如果需要完全模拟 Vercel Serverless Function 运行时，可使用 `npm run dev:vercel`。
 
 ## 构建
 
@@ -95,18 +97,27 @@ api/pricing.js
 /api/pricing
 ```
 
+健康检查地址：
+
+```text
+/api/health
+```
+
 接口职责：
 
 - 获取实时汇率
 - 抓取 Apple 官方 iCloud+ 价格页面
 - 在服务端解析价格数据
 - 返回前端可直接渲染的结构化 JSON
+- 使用 6 小时内存缓存减少重复抓取
+- 实时抓取失败时优先返回过期缓存，再返回 `api/fallback-pricing.js` 中的内置兜底数据
+- 返回 `cacheStatus`、`isFallback`、`updatedAt` 等元信息，方便前端展示数据状态
 
 ## Vercel 部署教程
 
 ### 方式一：通过 GitHub 导入部署，推荐
 
-1. 打开 Vercel：[https://vercel.com/new](https://vercel.com/new)。
+1. 打开 Vercel：[打开 Vercel](https://vercel.com/new)。
 
 2. 使用 GitHub 登录 Vercel。
 
@@ -168,9 +179,13 @@ git push
 
 ### 1. 本地访问 `/api/pricing` 返回源码而不是 JSON
 
-原因：你使用了普通 Vite 开发服务器 `npm run dev`。
+当前版本已通过 `vite.config.js` 的本地中间件支持普通 Vite 开发服务器访问 `/api/pricing`。如果仍返回源码，请重启开发服务器：
 
-解决：改用 Vercel 本地运行时：
+```bash
+npm run dev
+```
+
+如果需要完全模拟 Vercel 环境，可使用：
 
 ```bash
 npm run dev:vercel
@@ -183,7 +198,7 @@ npm run dev:vercel
 - Apple 官方页面暂时无法访问
 - 汇率 API 暂时不可用
 - Vercel Serverless Function 执行失败
-- 本地没有使用 `npm run dev:vercel` 调试服务端接口
+- 本地开发服务器未重启，新的 API 中间件未生效
 
 可以打开浏览器开发者工具，查看 `/api/pricing` 的响应内容。
 

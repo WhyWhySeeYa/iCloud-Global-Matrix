@@ -17,5 +17,16 @@ export const fetchPricingData = async () => {
     }
 
     const payload = await response.json();
-    return payload.data || [];
+    return {
+        data: payload.data || [],
+        meta: {
+            updatedAt: payload.updatedAt,
+            source: payload.source,
+            resolvedSource: payload.resolvedSource,
+            cacheStatus: payload.cacheStatus,
+            cacheAgeSeconds: payload.cacheAgeSeconds,
+            isFallback: Boolean(payload.isFallback),
+            message: payload.message
+        }
+    };
 };

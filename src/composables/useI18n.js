@@ -28,7 +28,21 @@ const messages = {
     lastUpdated: 'Last Updated',
     initializing: 'INITIALIZING SYSTEM...',
     fetchingPricingData: 'FETCHING PRICING DATA...',
-    dataFetchFailed: 'DATA FETCH FAILED. CHECK NETWORK OR USE LOCAL SOURCE.'
+    dataFetchFailed: 'DATA FETCH FAILED. CHECK NETWORK OR USE LOCAL SOURCE.',
+    searchPlaceholder: 'Search region or currency',
+    allPlans: 'All Plans',
+    allCurrencies: 'All Currencies',
+    onlyBestPrices: 'Best Prices Only',
+    resetFilters: 'Reset',
+    visibleRows: 'Visible',
+    totalRows: 'Total',
+    dataStatus: 'Data Status',
+    fallbackData: 'Fallback Data',
+    cachedData: 'Cached Data',
+    liveData: 'Live Data',
+    noMatchingData: 'No matching data',
+    exportCsv: 'CSV',
+    exportJson: 'JSON'
   },
   zh: {
     appTitle: 'iCloud+ 价格',
@@ -44,7 +58,21 @@ const messages = {
     lastUpdated: '最后更新',
     initializing: '正在初始化系统...',
     fetchingPricingData: '正在获取价格数据...',
-    dataFetchFailed: '数据获取失败，请检查网络或使用本地数据源。'
+    dataFetchFailed: '数据获取失败，请检查网络或使用本地数据源。',
+    searchPlaceholder: '搜索地区或货币',
+    allPlans: '全部套餐',
+    allCurrencies: '全部货币',
+    onlyBestPrices: '只看最低价',
+    resetFilters: '重置',
+    visibleRows: '当前显示',
+    totalRows: '总数',
+    dataStatus: '数据状态',
+    fallbackData: '兜底数据',
+    cachedData: '缓存数据',
+    liveData: '实时数据',
+    noMatchingData: '没有匹配数据',
+    exportCsv: 'CSV',
+    exportJson: 'JSON'
   }
 };
 

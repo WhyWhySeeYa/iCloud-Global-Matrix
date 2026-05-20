@@ -4,6 +4,7 @@
  * @description 主应用组件，负责视图渲染和组合各个业务逻辑 Hook
  */
 import { computed, ref, onMounted } from 'vue';
+import { STORAGE_TIERS } from './config/constants.js';
 import { useTheme } from './composables/useTheme.js';
 import { usePricingData } from './composables/usePricingData.js';
 import { useExport } from './composables/useExport.js';
@@ -30,7 +31,17 @@ const heroSubtitle = computed(() => import.meta.env.VITE_HERO_SUBTITLE || t('her
 const pricingTableLabels = computed(() => ({
   region: t('region'),
   currency: t('currency'),
-  bestPrice: t('bestPrice')
+  bestPrice: t('bestPrice'),
+  searchPlaceholder: t('searchPlaceholder'),
+  allPlans: t('allPlans'),
+  allCurrencies: t('allCurrencies'),
+  onlyBestPrices: t('onlyBestPrices'),
+  resetFilters: t('resetFilters'),
+  visibleRows: t('visibleRows'),
+  totalRows: t('totalRows'),
+  noMatchingData: t('noMatchingData'),
+  exportCsv: t('exportCsv'),
+  exportJson: t('exportJson')
 }));
 
 // 3. 核心业务数据逻辑 (获取、解析、排序)
@@ -42,6 +53,7 @@ const {
   isAsc, 
   sortedData, 
   bestPrices,
+  meta,
   fetchData,
   toggleSort
 } = usePricingData(t);
@@ -52,8 +64,15 @@ const localizedSortedData = computed(() => sortedData.value.map((item) => ({
   LocalizedCountryZH: localizeRegion(item.CountryISO, item.CountryZH)
 })));
 
+const dataStatusLabel = computed(() => {
+  if (!meta.value) return '';
+  if (meta.value.isFallback) return t('fallbackData');
+  if (['memory', 'stale'].includes(meta.value.cacheStatus)) return t('cachedData');
+  return t('liveData');
+});
+
 // 4. 导出图片逻辑
-const { saveAsImage } = useExport();
+const { saveAsImage, saveAsCsv, saveAsJson } = useExport();
 
 /**
  * 触发图片导出
@@ -70,6 +89,14 @@ const handleExport = () => {
   // 更好的做法是在 PricingTable 内部暴露一个方法或 ref，但为了保持父子组件解耦，
   // 我们这里通过 ref 获取组件实例，或者直接在父组件包裹一层 div 用于截图
   saveAsImage(tableContainer.value, isDark.value);
+};
+
+const handleExportCsv = () => {
+  saveAsCsv(localizedSortedData.value, STORAGE_TIERS);
+};
+
+const handleExportJson = () => {
+  saveAsJson({ meta: meta.value, data: localizedSortedData.value });
 };
 
 // --- 生命周期钩子 ---
@@ -116,13 +143,18 @@ onMounted(() => {
           :best-prices="bestPrices"
           :labels="pricingTableLabels"
           @toggle-sort="toggleSort"
+          @export-csv="handleExportCsv"
+          @export-json="handleExportJson"
         />
       </div>
 
       <!-- 底部页脚 -->
       <footer class="mt-12 pb-8 text-center text-xs text-[#86868b]">
         <p>{{ t('dataSource') }}</p>
-        <p class="mt-1">{{ t('lastUpdated') }}: {{ new Date().toLocaleTimeString(locale) }}</p>
+        <p v-if="meta" class="mt-1">
+          {{ t('lastUpdated') }}: {{ new Date(meta.updatedAt).toLocaleString(locale) }} · {{ t('dataStatus') }}: {{ dataStatusLabel }}
+        </p>
+        <p v-if="meta?.message" class="mt-1 text-amber-600 dark:text-amber-400">{{ meta.message }}</p>
       </footer>
     </main>
   </div>
