@@ -72,7 +72,7 @@ copy .env.example .env.local
 
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
-| `VITE_DEFAULT_LOCALE` | 可选语言数组，使用 JSON 数组配置，默认覆盖全球常用语言，支持任意 BCP 47 语言区域代码；语言按钮会按数组顺序循环切换 | 全球常用语言数组 |
+| `VITE_DEFAULT_LOCALE` | 可选语言数组，使用 JSON 数组配置，默认覆盖全球常用语言，支持任意 BCP 47 语言区域代码；语言选择菜单会按数组顺序展示 | 全球常用语言数组 |
 | `VITE_APP_TITLE` | 顶部导航栏标题 | `iCloud+ Pricing` |
 | `VITE_HERO_TITLE` | 页面主标题 | `Global Pricing Matrix.` |
 | `VITE_HERO_SUBTITLE` | 页面副标题 | `Compare iCloud+ storage plans across different regions and currencies in real-time.` |
