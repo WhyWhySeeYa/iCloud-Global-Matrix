@@ -1,5 +1,10 @@
 const APPLE_PRICING_URL = 'https://support.apple.com/zh-cn/108047';
 const EXCHANGE_RATE_URL = 'https://open.er-api.com/v6/latest/CNY';
+const APPLE_PRICING_FALLBACK_URLS = [
+  APPLE_PRICING_URL,
+  `https://corsproxy.io/?${encodeURIComponent(APPLE_PRICING_URL)}`,
+  `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(APPLE_PRICING_URL)}`
+];
 
 const STORAGE_TIERS = ['50GB', '200GB', '2TB', '6TB', '12TB'];
 
@@ -35,17 +40,17 @@ const currencyMap = {
 };
 
 const decodeHtmlEntities = (value) => value
-  .replace(/&nbsp;/g, ' ')
+  .replace(/&nbsp;|&#160;/g, ' ')
   .replace(/&/g, '&')
   .replace(/</g, '<')
   .replace(/>/g, '>')
   .replace(/"/g, '"')
-  .replace(/'/g, "'");
+  .replace(/'|'/g, "'");
 
 const htmlToTextLines = (html) => decodeHtmlEntities(html)
   .replace(/<script[\s\S]*?<\/script>/gi, '')
   .replace(/<style[\s\S]*?<\/style>/gi, '')
-  .replace(/<(h[1-6]|p|li|br|div|section|article|ul|ol)\b[^>]*>/gi, '\n')
+  .replace(/<(h[1-6]|p|li|br|div|section|article|ul|ol|tr|td|th)\b[^>]*>/gi, '\n')
   .replace(/<\/[^>]+>/g, '\n')
   .replace(/<[^>]+>/g, '')
   .split('\n')
@@ -58,11 +63,47 @@ const calculateCnyPrice = (priceVal, currencyCode, rates) => {
   return parseFloat((priceVal / rates[currencyCode]).toFixed(2));
 };
 
+const createCountryRecord = (countryMatch, id) => {
+  const zhCountry = countryMatch[1].trim();
+  const zhCurrency = countryMatch[2].trim();
+  const countryInfo = countryMap[zhCountry] || { iso: 'UN', en: zhCountry };
+  const currencyCode = currencyMap[zhCurrency] || 'USD';
+
+  return {
+    ID: id,
+    Country: countryInfo.en,
+    CountryZH: zhCountry,
+    CountryISO: countryInfo.iso,
+    Currency: currencyCode,
+    Plans: []
+  };
+};
+
+const addPlan = (country, planName, rawPrice, rates, planId) => {
+  if (!country || !STORAGE_TIERS.includes(planName) || country.Plans.some((plan) => plan.Name === planName)) return planId;
+
+  const formattedRawPrice = rawPrice.replace(',', '.');
+  const priceMatch = formattedRawPrice.match(/[0-9]+(?:\.[0-9]+)?/);
+  if (!priceMatch) return planId;
+
+  const priceVal = parseFloat(priceMatch[0]);
+  country.Plans.push({
+    ID: planId,
+    Name: planName,
+    Price: priceMatch[0],
+    PriceInCNY: calculateCnyPrice(priceVal, country.Currency, rates)
+  });
+
+  return planId + 1;
+};
+
 const parsePricingHtml = (htmlString, rates) => {
   const lines = htmlToTextLines(htmlString);
   const results = [];
   const countryHeaderRegex = /^([^（(0-9]+?)\d*\s*[（(]([^）)]+)[）)]\s*$/;
-  const planLineRegex = /^(50GB|200GB|2TB|6TB|12TB)\s*[：:]\s*(.+)$/;
+  const countryHeaderPrefixRegex = /^([^（(0-9]+?)\d*\s*[（(]([^）)]+)[）)]\s*/;
+  const singlePlanLineRegex = /^(50GB|200GB|2TB|6TB|12TB)\s*[：:]\s*(.+)$/;
+  const planSegmentRegex = /(50GB|200GB|2TB|6TB|12TB)\s*[：:]\s*([^：:]+?)(?=(?:50GB|200GB|2TB|6TB|12TB)\s*[：:]|$)/g;
   let current = null;
   let countryIdCounter = 1;
   let planIdCounter = 1;
@@ -73,46 +114,32 @@ const parsePricingHtml = (htmlString, rates) => {
   };
 
   for (const line of lines) {
-    const countryMatch = line.match(countryHeaderRegex);
-    if (countryMatch) {
+    const exactCountryMatch = line.match(countryHeaderRegex);
+    const countryPrefixMatch = exactCountryMatch || line.match(countryHeaderPrefixRegex);
+
+    if (countryPrefixMatch) {
       flushCurrent();
+      current = createCountryRecord(countryPrefixMatch, countryIdCounter++);
 
-      const zhCountry = countryMatch[1].trim();
-      const zhCurrency = countryMatch[2].trim();
-      const countryInfo = countryMap[zhCountry] || { iso: 'UN', en: zhCountry };
-      const currencyCode = currencyMap[zhCurrency] || 'USD';
-
-      current = {
-        ID: countryIdCounter++,
-        Country: countryInfo.en,
-        CountryZH: zhCountry,
-        CountryISO: countryInfo.iso,
-        Currency: currencyCode,
-        Plans: []
-      };
+      const rest = exactCountryMatch ? '' : line.slice(countryPrefixMatch[0].length).trim();
+      for (const planMatch of rest.matchAll(planSegmentRegex)) {
+        planIdCounter = addPlan(current, planMatch[1], planMatch[2], rates, planIdCounter);
+      }
 
       continue;
     }
 
     if (!current) continue;
 
-    const planMatch = line.match(planLineRegex);
-    if (!planMatch) continue;
+    const singlePlanMatch = line.match(singlePlanLineRegex);
+    if (singlePlanMatch) {
+      planIdCounter = addPlan(current, singlePlanMatch[1], singlePlanMatch[2], rates, planIdCounter);
+      continue;
+    }
 
-    const planName = planMatch[1];
-    if (!STORAGE_TIERS.includes(planName) || current.Plans.some((plan) => plan.Name === planName)) continue;
-
-    const formattedRawPrice = planMatch[2].replace(',', '.');
-    const priceMatch = formattedRawPrice.match(/[0-9]+(?:\.[0-9]+)?/);
-    if (!priceMatch) continue;
-
-    const priceVal = parseFloat(priceMatch[0]);
-    current.Plans.push({
-      ID: planIdCounter++,
-      Name: planName,
-      Price: priceMatch[0],
-      PriceInCNY: calculateCnyPrice(priceVal, current.Currency, rates)
-    });
+    for (const planMatch of line.matchAll(planSegmentRegex)) {
+      planIdCounter = addPlan(current, planMatch[1], planMatch[2], rates, planIdCounter);
+    }
   }
 
   flushCurrent();
@@ -150,6 +177,24 @@ const fetchText = async (url) => {
   return response.text();
 };
 
+const fetchApplePricingHtml = async () => {
+  const errors = [];
+
+  for (const url of APPLE_PRICING_FALLBACK_URLS) {
+    try {
+      const html = await fetchText(url);
+      if (html.includes('50GB') && html.includes('iCloud')) {
+        return { html, sourceUrl: url };
+      }
+      errors.push(`${url}: response does not look like Apple pricing HTML`);
+    } catch (error) {
+      errors.push(`${url}: ${error.message}`);
+    }
+  }
+
+  throw new Error(`Unable to fetch Apple pricing page. ${errors.join(' | ')}`);
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -157,12 +202,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const [rateData, htmlString] = await Promise.all([
+    const [rateData, applePricing] = await Promise.all([
       fetchJson(EXCHANGE_RATE_URL),
-      fetchText(APPLE_PRICING_URL)
+      fetchApplePricingHtml()
     ]);
 
-    const data = parsePricingHtml(htmlString, rateData.rates || {});
+    const data = parsePricingHtml(applePricing.html, rateData.rates || {});
 
     if (data.length === 0) {
       throw new Error('Apple pricing page parsed successfully but no pricing data was found.');
@@ -172,7 +217,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       data,
       updatedAt: new Date().toISOString(),
-      source: APPLE_PRICING_URL
+      source: APPLE_PRICING_URL,
+      resolvedSource: applePricing.sourceUrl
     });
   } catch (error) {
     console.error('Failed to load pricing data:', error);
