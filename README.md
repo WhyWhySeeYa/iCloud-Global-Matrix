@@ -85,19 +85,11 @@ api/pricing.js
 
 ### 方式一：通过 GitHub 导入部署，推荐
 
-1. 打开 Vercel：
-
-   ```text
-   https://vercel.com/new
-   ```
+1. 打开 Vercel：[https://vercel.com/new](https://vercel.com/new)。
 
 2. 使用 GitHub 登录 Vercel。
 
-3. 选择仓库：
-
-   ```text
-   98yyc/iCloud-Global-Matrix
-   ```
+3. 选择仓库：[98yyc/iCloud-Global-Matrix](https://github.com/98yyc/iCloud-Global-Matrix)。
 
 4. 确认项目配置：
 
@@ -110,11 +102,7 @@ api/pricing.js
 
 5. 点击 `Deploy`。
 
-6. 部署完成后，Vercel 会生成一个线上访问地址，例如：
-
-   ```text
-   https://icloud-global-matrix.vercel.app
-   ```
+6. 部署完成后，Vercel 会生成一个线上访问地址，例如：[https://icloud-global-matrix.vercel.app](https://icloud-global-matrix.vercel.app)。
 
 ### 方式二：通过 Vercel CLI 部署
 
