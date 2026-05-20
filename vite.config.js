@@ -59,10 +59,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          vue: ['vue'],
-          element: ['element-plus'],
-          export: ['html2canvas']
+        manualChunks(id) {
+          if (id.includes('node_modules/vue')) return 'vue'
+          if (id.includes('node_modules/element-plus')) return 'element'
+          if (id.includes('node_modules/html2canvas')) return 'export'
         }
       }
     }
