@@ -1,0 +1,198 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* --- 布局容器 --- */
+  .app-container {
+    @apply min-h-screen bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] transition-colors duration-300 selection:bg-[#0071e3]/30;
+  }
+
+  .content-wrapper {
+    @apply max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12;
+  }
+
+  /* --- 顶部导航栏 --- */
+  .header-sticky {
+    @apply sticky top-0 z-50 bg-white/70 dark:bg-[#1c1c1e]/70 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-colors duration-300;
+  }
+
+  .header-inner {
+    @apply max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between;
+  }
+
+  .header-logo-area {
+    @apply flex items-center gap-2;
+  }
+
+  .header-title {
+    @apply text-lg font-semibold tracking-tight text-[#1d1d1f] dark:text-white;
+  }
+
+  .header-actions {
+    @apply flex items-center gap-4;
+  }
+
+  .btn-theme-toggle {
+    @apply text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors;
+  }
+
+  .btn-export {
+    @apply bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-medium px-4 py-1.5 rounded-full transition-colors shadow-sm;
+  }
+
+  /* --- 页面标题 --- */
+  .page-header {
+    @apply text-center mb-8 md:mb-12;
+  }
+
+  .page-title {
+    @apply text-2xl md:text-5xl font-bold tracking-tight text-[#1d1d1f] dark:text-white mb-3 md:mb-4;
+  }
+
+  .page-subtitle {
+    @apply text-sm md:text-lg text-[#86868b] max-w-2xl mx-auto;
+  }
+
+  /* --- 状态提示 --- */
+  .state-error {
+    @apply mb-8 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl text-center text-sm;
+  }
+
+  .state-loading {
+    @apply flex flex-col items-center justify-center py-32 space-y-4;
+  }
+
+  .loading-icon {
+    @apply animate-spin h-8 w-8 text-[#86868b];
+  }
+
+  .loading-text {
+    @apply text-[#86868b] text-sm;
+  }
+
+  /* --- 表格容器 --- */
+  .table-card {
+    @apply bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4;
+  }
+
+  /* --- 表格内容 --- */
+  .cell-region {
+    @apply flex items-center gap-2 md:gap-3;
+  }
+
+  .region-index {
+    @apply text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0;
+  }
+
+  .region-name {
+    @apply font-medium text-[#1d1d1f] dark:text-white truncate;
+  }
+
+  .region-sub {
+    @apply text-[10px] text-[#86868b] truncate;
+  }
+
+  .cell-currency {
+    @apply text-xs text-[#86868b];
+  }
+
+  /* --- 表头排序 --- */
+  .header-sortable {
+    @apply flex items-center justify-center gap-1.5 cursor-pointer select-none group;
+  }
+
+  .sort-icon-wrapper {
+    @apply flex flex-col gap-[2px] opacity-0 group-hover:opacity-50 transition-opacity;
+  }
+
+  .sort-icon-active {
+    @apply !opacity-100;
+  }
+
+  /* --- 价格单元格 --- */
+  .cell-price-wrapper {
+    @apply flex flex-col items-center justify-center w-full h-full;
+  }
+
+  .price-highlight-bg {
+    @apply bg-gray-50/30 dark:bg-white/[0.01];
+  }
+
+  .price-text {
+    @apply text-[#1d1d1f] dark:text-white;
+  }
+
+  .price-best {
+    @apply font-medium;
+  }
+
+  .price-dot {
+    @apply flex h-1.5 w-1.5 rounded-full bg-[#0071e3];
+  }
+
+  .price-cny {
+    @apply text-[11px] mt-0.5;
+  }
+
+  .text-primary {
+    @apply text-[#0071e3];
+  }
+
+  .text-secondary {
+    @apply text-[#86868b];
+  }
+
+  /* --- 页脚 --- */
+  .app-footer {
+    @apply mt-12 pb-8 text-center text-xs text-[#86868b];
+  }
+}
+
+/* --- 全局基础样式 --- */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  background-color: #f5f5f7;
+  color: #1d1d1f;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark body {
+  background-color: black;
+  color: #f5f5f7;
+}
+
+/* macOS style scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.4);
+}
