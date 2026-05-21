@@ -14,6 +14,19 @@ const downloadBlob = (content, filename, type) => {
   URL.revokeObjectURL(url);
 };
 
+const downloadTextFile = (content, filename, type) => {
+  const encoder = new TextEncoder();
+  const utf8Bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+  const body = encoder.encode(content);
+  const blob = new Blob([utf8Bom, body], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 const normalizeCsvCell = (value) => {
   const text = String(value ?? '').replace(/\r?\n/g, ' ').trim();
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
@@ -91,10 +104,10 @@ export function useExport() {
       return values.map(escapeCsvCell).join(',');
     });
 
-    downloadBlob(
-      `\uFEFFsep=,\r\n${[headers.map(escapeCsvCell).join(','), ...rows].join('\r\n')}`,
+    downloadTextFile(
+      `sep=,\r\n${[headers.map(escapeCsvCell).join(','), ...rows].join('\r\n')}`,
       `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.csv`,
-      'text/csv;charset=utf-8-sig'
+      'text/csv;charset=utf-8'
     );
   };
 
