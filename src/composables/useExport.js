@@ -94,9 +94,9 @@ export function useExport() {
   };
 
   const saveAsCsv = (data, tiers) => {
-    const headers = ['Region', 'RegionZH', 'ISO', 'Currency', ...tiers.flatMap((tier) => [`${tier} Price`, `${tier} CNY`])];
+    const headers = ['RegionZH', ...tiers.flatMap((tier) => [`${tier} Price`, `${tier} CNY`])];
     const rows = data.map((country) => {
-      const values = [country.Country, country.CountryZH, country.CountryISO, country.Currency];
+      const values = [country.CountryZH];
       tiers.forEach((tier) => {
         const plan = country.Plans.find((item) => item.Name === tier);
         values.push(plan?.Price || '', plan?.PriceInCNY || '');
