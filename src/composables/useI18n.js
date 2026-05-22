@@ -41,6 +41,8 @@ const messages = {
     cachedData: 'Cached Data',
     liveData: 'Live Data',
     noMatchingData: 'No matching data',
+    benchmarkPlaceholder: 'Benchmark region',
+    noBenchmark: 'No benchmark',
     exportCsv: 'CSV',
     exportJson: 'JSON'
   },
@@ -71,6 +73,8 @@ const messages = {
     cachedData: '缓存数据',
     liveData: '实时数据',
     noMatchingData: '没有匹配数据',
+    benchmarkPlaceholder: '对标地区',
+    noBenchmark: '不对标',
     exportCsv: 'CSV',
     exportJson: 'JSON'
   }
@@ -143,6 +147,7 @@ export function useI18n() {
 
   const localizeRegion = (countryISO, fallbackName) => {
     if (!countryISO || countryISO === 'UN') return fallbackName;
+    if (countryISO === 'CN') return getMessageLocale(locale.value) === 'zh' ? '中国大陆' : 'China mainland';
 
     try {
       const regionNames = new Intl.DisplayNames([locale.value, 'en-US'], { type: 'region' });

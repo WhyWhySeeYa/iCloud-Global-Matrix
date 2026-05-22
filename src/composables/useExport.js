@@ -14,11 +14,21 @@ const downloadBlob = (content, filename, type) => {
   URL.revokeObjectURL(url);
 };
 
+const encodeUtf16Le = (content) => {
+  const buffer = new ArrayBuffer(content.length * 2);
+  const view = new DataView(buffer);
+
+  for (let i = 0; i < content.length; i += 1) {
+    view.setUint16(i * 2, content.charCodeAt(i), true);
+  }
+
+  return new Uint8Array(buffer);
+};
+
 const downloadTextFile = (content, filename, type) => {
-  const encoder = new TextEncoder();
-  const utf8Bom = new Uint8Array([0xef, 0xbb, 0xbf]);
-  const body = encoder.encode(content);
-  const blob = new Blob([utf8Bom, body], { type });
+  const utf16LeBom = new Uint8Array([0xff, 0xfe]);
+  const body = encodeUtf16Le(content);
+  const blob = new Blob([utf16LeBom, body], { type });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -46,39 +56,74 @@ export function useExport() {
     if (!containerRef) return;
     
     try {
-      const el = containerRef;
+      const el = containerRef.querySelector('.pricing-export-area') || containerRef;
       
-      // 1. 计算表格内容的实际总宽度 (解决移动端滚动截断问题)
-      // 查找 Element Plus 表格内部的实际内容区域
+      // 1. 临时展开 Element Plus 表格内部滚动容器，避免只截到当前可视区域
       const tableBody = el.querySelector('.el-table__body-wrapper .el-table__body');
-      // 取内容宽度和容器宽度的最大值，加上 40px 的 padding 缓冲
+      const tableBodyWrapper = el.querySelector('.el-table__body-wrapper');
+      const tableHeaderWrapper = el.querySelector('.el-table__header-wrapper');
+      const tableWrapper = el.querySelector('.el-table__inner-wrapper');
+      const scrollbarWrap = el.querySelector('.el-scrollbar__wrap');
+      const scrollbarView = el.querySelector('.el-scrollbar__view');
+      const bottomPadding = 180;
       const targetWidth = tableBody ? Math.max(tableBody.offsetWidth + 40, el.offsetWidth) : el.offsetWidth;
+      const styledNodes = [
+        [el, `width: ${targetWidth}px !important; max-width: none !important; overflow: visible !important; padding-bottom: ${bottomPadding}px !important; box-sizing: border-box !important;`],
+        [tableWrapper, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
+        [tableBodyWrapper, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
+        [scrollbarWrap, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
+        [scrollbarView, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
+      ]
+        .filter(([node]) => node)
+        .map(([node, style]) => ({
+          node,
+          originalStyle: node.getAttribute('style'),
+          style,
+        }));
 
-      // 2. 保存原始内联样式，以便截图后恢复
-      const originalStyle = el.getAttribute('style');
+      styledNodes.forEach(({ node, originalStyle, style }) => {
+        node.setAttribute('style', `${originalStyle || ''} ${style}`);
+      });
       
-      // 3. 强制展开容器宽度，消除横向滚动条，让所有内容都在可视区域内
-      el.setAttribute('style', `${originalStyle || ''} width: ${targetWidth}px !important; max-width: none !important;`);
-      
-      // 4. 等待 Vue 和 Element Plus 重新计算布局并渲染 (非常重要，否则截图可能还是旧的布局)
+      // 2. 等待 Vue 和 Element Plus 重新计算布局并渲染后，再按真实内容高度截图
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // 5. 执行截图
+      const fullTableHeight = (tableHeaderWrapper?.offsetHeight || 0) + Math.max(
+        tableBody?.offsetHeight || 0,
+        tableBody?.scrollHeight || 0,
+        tableBodyWrapper?.scrollHeight || 0,
+        scrollbarView?.scrollHeight || 0
+      );
+      const targetHeight = Math.ceil(Math.max(
+        el.scrollHeight,
+        el.offsetHeight,
+        tableWrapper?.scrollHeight || 0,
+        tableWrapper?.offsetHeight || 0,
+        fullTableHeight
+      ) + bottomPadding);
+
+      // 3. 执行截图
       const canvas = await html2canvas(el, {
         scale: 2, // 提高截图清晰度 (Retina 屏幕标准)
         backgroundColor: isDark ? '#1c1c1e' : '#ffffff', // 根据当前主题设置背景色
         useCORS: true, // 允许加载跨域图片 (如果有的话)
         logging: false, // 关闭 html2canvas 的控制台日志
         width: targetWidth, // 显式指定截图的画布宽度
+        height: targetHeight, // 使用完整表格高度，避免最后一行文字被裁切
         windowWidth: targetWidth, // 模拟浏览器窗口宽度，确保媒体查询等样式正确应用
+        windowHeight: targetHeight,
+        scrollX: 0,
+        scrollY: 0,
       });
       
-      // 6. 恢复原始样式，不影响用户继续浏览
-      if (originalStyle) {
-        el.setAttribute('style', originalStyle);
-      } else {
-        el.removeAttribute('style');
-      }
+      // 4. 恢复原始样式，不影响用户继续浏览
+      styledNodes.forEach(({ node, originalStyle }) => {
+        if (originalStyle) {
+          node.setAttribute('style', originalStyle);
+        } else {
+          node.removeAttribute('style');
+        }
+      });
       
       // 7. 将 Canvas 转换为 Data URL 并触发下载
       const image = canvas.toDataURL('image/png');
@@ -94,20 +139,20 @@ export function useExport() {
   };
 
   const saveAsCsv = (data, tiers) => {
-    const headers = ['RegionZH', ...tiers.flatMap((tier) => [`${tier} Price`, `${tier} CNY`])];
+    const headers = ['Region', ...tiers.flatMap((tier) => [`${tier} Price`, `${tier} CNY`])];
     const rows = data.map((country) => {
-      const values = [country.CountryZH];
+      const values = [country.LocalizedCountryZH || country.LocalizedCountry || country.CountryZH || country.Country];
       tiers.forEach((tier) => {
         const plan = country.Plans.find((item) => item.Name === tier);
         values.push(plan?.Price || '', plan?.PriceInCNY || '');
       });
-      return values.map(escapeCsvCell).join(',');
+      return values.map(escapeCsvCell).join('\t');
     });
 
     downloadTextFile(
-      `sep=,\r\n${[headers.map(escapeCsvCell).join(','), ...rows].join('\r\n')}`,
+      [headers.map(escapeCsvCell).join('\t'), ...rows].join('\r\n'),
       `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.csv`,
-      'text/csv;charset=utf-8'
+      'text/csv;charset=utf-16le'
     );
   };
 

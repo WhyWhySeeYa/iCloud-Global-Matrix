@@ -40,6 +40,8 @@ const pricingTableLabels = computed(() => ({
   visibleRows: t('visibleRows'),
   totalRows: t('totalRows'),
   noMatchingData: t('noMatchingData'),
+  benchmarkPlaceholder: t('benchmarkPlaceholder'),
+  noBenchmark: t('noBenchmark'),
   exportCsv: t('exportCsv'),
   exportJson: t('exportJson')
 }));

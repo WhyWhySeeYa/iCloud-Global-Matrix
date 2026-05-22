@@ -9,7 +9,7 @@
  * @throws {Error} 网络请求失败或服务端解析失败时抛出异常
  */
 export const fetchPricingData = async () => {
-    const response = await fetch('/api/pricing');
+    const response = await fetch(`/api/pricing?refresh=1&t=${Date.now()}`, { cache: 'no-store' });
 
     if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));

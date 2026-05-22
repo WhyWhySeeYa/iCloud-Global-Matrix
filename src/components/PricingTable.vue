@@ -47,8 +47,45 @@ const searchKeyword = ref('');
 const selectedTier = ref('all');
 const selectedCurrency = ref('all');
 const onlyBestPrices = ref(false);
+const selectedBenchmark = ref('none');
 
 const currencyOptions = computed(() => [...new Set(props.data.map((item) => item.Currency).filter(Boolean))].sort());
+
+const countryOptions = computed(() => props.data
+  .map((country) => ({
+    value: country.CountryISO || country.Country,
+    label: country.LocalizedCountryZH || country.LocalizedCountry || country.CountryZH || country.Country,
+    currency: country.Currency
+  }))
+  .filter((country) => country.value && country.label)
+  .sort((a, b) => a.label.localeCompare(b.label)));
+
+const benchmarkCountry = computed(() => {
+  if (selectedBenchmark.value === 'none') return null;
+  return props.data.find((country) => (country.CountryISO || country.Country) === selectedBenchmark.value) || null;
+});
+
+const getPlan = (country, tier) => country?.Plans.find((plan) => plan.Name === tier);
+
+const getBenchmarkComparison = (country, tier) => {
+  const benchmarkPlan = getPlan(benchmarkCountry.value, tier);
+  const currentPlan = getPlan(country, tier);
+  const benchmarkPrice = benchmarkPlan?.PriceInCNY;
+  const currentPrice = currentPlan?.PriceInCNY;
+
+  if (!benchmarkCountry.value || !benchmarkPrice || !currentPrice || country === benchmarkCountry.value) return null;
+
+  const diff = currentPrice - benchmarkPrice;
+  const percent = benchmarkPrice ? (diff / benchmarkPrice) * 100 : 0;
+
+  return {
+    diff,
+    percent,
+    isHigher: diff > 0,
+    isLower: diff < 0,
+    text: `${diff > 0 ? '+' : ''}${percent.toFixed(1)}%`
+  };
+};
 
 const filteredData = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
@@ -75,6 +112,7 @@ const resetFilters = () => {
   searchKeyword.value = '';
   selectedTier.value = 'all';
   selectedCurrency.value = 'all';
+  selectedBenchmark.value = 'none';
   onlyBestPrices.value = false;
 };
 </script>
@@ -107,6 +145,15 @@ const resetFilters = () => {
           <el-option value="all" :label="labels.allCurrencies" />
           <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
         </el-select>
+        <el-select v-model="selectedBenchmark" filterable class="w-full sm:w-52" :placeholder="labels.benchmarkPlaceholder">
+          <el-option value="none" :label="labels.noBenchmark" />
+          <el-option
+            v-for="country in countryOptions"
+            :key="country.value"
+            :value="country.value"
+            :label="`${country.label} (${country.currency})`"
+          />
+        </el-select>
         <el-checkbox v-model="onlyBestPrices" class="!mr-0">{{ labels.onlyBestPrices }}</el-checkbox>
       </div>
 
@@ -120,14 +167,14 @@ const resetFilters = () => {
 
     <el-empty v-if="filteredData.length === 0" :description="labels.noMatchingData" />
 
-    <el-table v-else :data="filteredData" style="width: 100%" :row-class-name="() => 'transition-colors'">
+    <div v-else class="pricing-export-area">
+      <el-table :data="filteredData" style="width: 100%" :row-class-name="() => 'transition-colors'">
       <el-table-column fixed prop="CountryZH" :label="labels.region" min-width="120">
         <template #default="scope">
           <div class="flex items-center gap-2 md:gap-3">
             <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ scope.$index + 1 }}</span>
             <div class="flex flex-col min-w-0">
               <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.LocalizedCountryZH || scope.row.CountryZH }}</span>
-              <span class="text-[10px] text-[#86868b] truncate">{{ scope.row.LocalizedCountry || scope.row.Country }}</span>
             </div>
           </div>
         </template>
@@ -173,10 +220,20 @@ const resetFilters = () => {
                 ¥{{ scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY.toFixed(2) }}
               </span>
             </span>
+            <span v-if="getBenchmarkComparison(scope.row, tier)"
+                  class="text-[10px] mt-0.5 font-medium"
+                  :class="{
+                    'text-red-500 dark:text-red-400': getBenchmarkComparison(scope.row, tier).isHigher,
+                    'text-green-600 dark:text-green-400': getBenchmarkComparison(scope.row, tier).isLower,
+                    'text-[#86868b]': !getBenchmarkComparison(scope.row, tier).isHigher && !getBenchmarkComparison(scope.row, tier).isLower
+                  }">
+              {{ getBenchmarkComparison(scope.row, tier).text }}
+            </span>
           </div>
         </template>
-      </el-table-column>
-    </el-table>
+        </el-table-column>
+      </el-table>
+    </div>
   </div>
 </template>
 
