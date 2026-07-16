@@ -160,8 +160,8 @@ const resetFilters = () => {
       <div class="flex flex-wrap items-center gap-2 text-xs text-[#86868b]">
         <span>{{ labels.visibleRows }}: {{ filteredData.length }} / {{ labels.totalRows }}: {{ data.length }}</span>
         <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
-        <button class="btn-filter-action" @click="emit('export-csv')">{{ labels.exportCsv }}</button>
-        <button class="btn-filter-action" @click="emit('export-json')">{{ labels.exportJson }}</button>
+        <button class="btn-filter-action" @click="emit('export-csv', filteredData)">{{ labels.exportCsv }}</button>
+        <button class="btn-filter-action" @click="emit('export-json', filteredData)">{{ labels.exportJson }}</button>
       </div>
     </div>
 

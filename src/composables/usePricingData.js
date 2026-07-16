@@ -21,14 +21,14 @@ export function usePricingData(t) {
   /**
    * 核心业务流程：获取并解析数据
    */
-  const fetchData = async () => {
+  const fetchData = async ({ force = false } = {}) => {
     loading.value = true;
     error.value = null;
     
     try {
       // 1. 从服务端获取已经抓取、解析并计算好的价格数据
       loadingText.value = t('fetchingPricingData');
-      const payload = await fetchPricingData();
+      const payload = await fetchPricingData({ force });
       rawData.value = payload.data;
       meta.value = payload.meta;
       

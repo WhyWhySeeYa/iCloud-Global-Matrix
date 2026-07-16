@@ -93,12 +93,12 @@ const handleExport = () => {
   saveAsImage(tableContainer.value, isDark.value);
 };
 
-const handleExportCsv = () => {
-  saveAsCsv(localizedSortedData.value, STORAGE_TIERS);
+const handleExportCsv = (data) => {
+  saveAsCsv(data, STORAGE_TIERS);
 };
 
-const handleExportJson = () => {
-  saveAsJson({ meta: meta.value, data: localizedSortedData.value });
+const handleExportJson = (data) => {
+  saveAsJson({ meta: meta.value, data });
 };
 
 // --- 生命周期钩子 ---

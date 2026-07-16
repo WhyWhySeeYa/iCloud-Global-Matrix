@@ -8,8 +8,11 @@
  * @returns {Promise<Array>} 结构化价格数据
  * @throws {Error} 网络请求失败或服务端解析失败时抛出异常
  */
-export const fetchPricingData = async () => {
-    const response = await fetch(`/api/pricing?refresh=1&t=${Date.now()}`, { cache: 'no-store' });
+export const fetchPricingData = async ({ force = false } = {}) => {
+    const query = force ? '?refresh=1' : '';
+    const response = await fetch(`/api/pricing${query}`, {
+        cache: force ? 'no-store' : 'default'
+    });
 
     if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));

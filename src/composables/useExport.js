@@ -2,8 +2,6 @@
  * @file useExport.js
  * @description 导出功能 Hook，负责将 DOM 元素转换为图片并下载
  */
-import html2canvas from 'html2canvas';
-
 const downloadBlob = (content, filename, type) => {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -54,8 +52,11 @@ export function useExport() {
    */
   const saveAsImage = async (containerRef, isDark) => {
     if (!containerRef) return;
-    
+
+    let styledNodes = [];
+
     try {
+      const { default: html2canvas } = await import('html2canvas');
       const el = containerRef.querySelector('.pricing-export-area') || containerRef;
       
       // 1. 临时展开 Element Plus 表格内部滚动容器，避免只截到当前可视区域
@@ -67,7 +68,7 @@ export function useExport() {
       const scrollbarView = el.querySelector('.el-scrollbar__view');
       const bottomPadding = 180;
       const targetWidth = tableBody ? Math.max(tableBody.offsetWidth + 40, el.offsetWidth) : el.offsetWidth;
-      const styledNodes = [
+      styledNodes = [
         [el, `width: ${targetWidth}px !important; max-width: none !important; overflow: visible !important; padding-bottom: ${bottomPadding}px !important; box-sizing: border-box !important;`],
         [tableWrapper, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
         [tableBodyWrapper, 'height: auto !important; max-height: none !important; overflow: visible !important;'],
@@ -116,15 +117,6 @@ export function useExport() {
         scrollY: 0,
       });
       
-      // 4. 恢复原始样式，不影响用户继续浏览
-      styledNodes.forEach(({ node, originalStyle }) => {
-        if (originalStyle) {
-          node.setAttribute('style', originalStyle);
-        } else {
-          node.removeAttribute('style');
-        }
-      });
-      
       // 7. 将 Canvas 转换为 Data URL 并触发下载
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
@@ -135,6 +127,14 @@ export function useExport() {
     } catch (err) {
       console.error('图片导出失败:', err);
       alert('IMAGE EXPORT FAILED');
+    } finally {
+      styledNodes.forEach(({ node, originalStyle }) => {
+        if (originalStyle) {
+          node.setAttribute('style', originalStyle);
+        } else {
+          node.removeAttribute('style');
+        }
+      });
     }
   };
 

@@ -4,6 +4,7 @@ const APPLE_PRICING_URL = 'https://support.apple.com/zh-cn/108047';
 const EXCHANGE_RATE_URL = 'https://open.er-api.com/v6/latest/CNY';
 const MEMORY_CACHE_TTL = 1000 * 60 * 60 * 6;
 const STALE_CACHE_TTL = 1000 * 60 * 60 * 24;
+const REQUEST_TIMEOUT = 1000 * 12;
 const APPLE_PRICING_FALLBACK_URLS = [
   APPLE_PRICING_URL,
   `https://corsproxy.io/?${encodeURIComponent(APPLE_PRICING_URL)}`,
@@ -206,8 +207,22 @@ const parsePricingHtml = (htmlString, rates) => {
   return results.length > canonicalCountryCount ? results.slice(0, canonicalCountryCount) : results;
 };
 
+const fetchWithTimeout = async (url, options = {}) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
 const fetchJson = async (url) => {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       'accept': 'application/json',
       'user-agent': 'Mozilla/5.0 (compatible; iCloudPricingBot/1.0)'
@@ -222,7 +237,7 @@ const fetchJson = async (url) => {
 };
 
 const fetchText = async (url) => {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
@@ -243,7 +258,7 @@ const fetchApplePricingHtml = async () => {
   for (const url of APPLE_PRICING_FALLBACK_URLS) {
     try {
       const html = await fetchText(url);
-      if (html.includes('50GB') && html.includes('iCloud')) {
+      if (/50\s*GB/i.test(html) && /iCloud/i.test(html)) {
         return { html, sourceUrl: url };
       }
       errors.push(`${url}: response does not look like Apple pricing HTML`);
