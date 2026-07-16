@@ -141,37 +141,39 @@ const resetFilters = () => {
   <!-- Data Table -->
   <div v-else class="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4">
     <div class="mb-4 space-y-3">
-      <div class="flex gap-2">
-        <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="flex-1 lg:max-w-64" />
-        <button
-          type="button"
-          class="btn-filter-action lg:hidden shrink-0"
-          @click="showMobileFilters = !showMobileFilters"
-        >
-          {{ showMobileFilters ? labels.hideFilters : labels.showFilters }}
-        </button>
-      </div>
+      <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div class="flex gap-2 lg:w-64 lg:shrink-0">
+          <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="flex-1" />
+          <button
+            type="button"
+            class="btn-filter-action lg:hidden shrink-0"
+            @click="showMobileFilters = !showMobileFilters"
+          >
+            {{ showMobileFilters ? labels.hideFilters : labels.showFilters }}
+          </button>
+        </div>
 
-      <div
-        class="flex-col gap-2 lg:flex lg:flex-row lg:items-center"
-        :class="showMobileFilters ? 'flex' : 'hidden'"
-      >
-        <el-select
-          v-model="selectedTiers"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          clearable
-          :placeholder="labels.allPlans"
-          class="w-full lg:w-52"
+        <div
+          class="flex-col gap-2 lg:flex lg:flex-row lg:items-center lg:flex-1"
+          :class="showMobileFilters ? 'flex' : 'hidden'"
         >
-          <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
-        </el-select>
-        <el-select v-model="selectedCurrency" filterable class="w-full lg:w-40">
-          <el-option value="all" :label="labels.allCurrencies" />
-          <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
-        </el-select>
-        <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ labels.onlyBestPrices }}</el-checkbox>
+          <el-select
+            v-model="selectedTiers"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            clearable
+            :placeholder="labels.allPlans"
+            class="w-full lg:w-52"
+          >
+            <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
+          </el-select>
+          <el-select v-model="selectedCurrency" filterable class="w-full lg:w-40">
+            <el-option value="all" :label="labels.allCurrencies" />
+            <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
+          </el-select>
+          <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ labels.onlyBestPrices }}</el-checkbox>
+        </div>
       </div>
 
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[#86868b]">
