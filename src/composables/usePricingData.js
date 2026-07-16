@@ -10,6 +10,7 @@ export function usePricingData(t) {
   // --- 响应式状态 ---
   const rawData = ref([]); // 原始解析数据
   const loading = ref(true); // 加载状态
+  const refreshing = ref(false); // 手动刷新状态
   const loadingText = ref(t('initializing')); // 加载提示
   const error = ref(null); // 错误信息
   const meta = ref(null); // 服务端数据元信息
@@ -22,21 +23,27 @@ export function usePricingData(t) {
    * 核心业务流程：获取并解析数据
    */
   const fetchData = async ({ force = false } = {}) => {
-    loading.value = true;
+    if (force) {
+      refreshing.value = true;
+    } else {
+      loading.value = true;
+    }
     error.value = null;
     
     try {
       // 1. 从服务端获取已经抓取、解析并计算好的价格数据
-      loadingText.value = t('fetchingPricingData');
+      loadingText.value = t(force ? 'refreshingPricingData' : 'fetchingPricingData');
       const payload = await fetchPricingData({ force });
       rawData.value = payload.data;
       meta.value = payload.meta;
-      
+      return true;
     } catch (err) {
       console.error('数据处理失败:', err);
       error.value = t('dataFetchFailed');
+      return false;
     } finally {
       loading.value = false;
+      refreshing.value = false;
     }
   };
 
@@ -84,6 +91,7 @@ export function usePricingData(t) {
 
   return {
     loading,
+    refreshing,
     loadingText,
     error,
     sortTier,

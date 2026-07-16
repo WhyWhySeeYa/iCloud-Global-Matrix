@@ -3,7 +3,7 @@
  * @file PricingTable.vue
  * @description 价格展示表格组件，负责渲染数据、筛选、排序和高亮显示
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { STORAGE_TIERS } from '../config/constants.js';
 
 const props = defineProps({
@@ -18,6 +18,14 @@ const props = defineProps({
   loadingText: {
     type: String,
     default: ''
+  },
+  refreshing: {
+    type: Boolean,
+    default: false
+  },
+  exporting: {
+    type: Boolean,
+    default: false
   },
   error: {
     type: String,
@@ -41,16 +49,22 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['toggle-sort', 'export-csv', 'export-json']);
+const emit = defineEmits(['toggle-sort', 'export-csv', 'export-json', 'refresh']);
 
 const searchKeyword = ref('');
-const selectedTier = ref('all');
+const selectedTiers = ref([]);
 const selectedCurrency = ref('all');
 const onlyBestPrices = ref(false);
+const showMobileFilters = ref(false);
+const currentPage = ref(1);
+const pageSize = ref(20);
 
 const currencyOptions = computed(() => [...new Set(props.data.map((item) => item.Currency).filter(Boolean))].sort());
 
-const visibleTiers = computed(() => selectedTier.value === 'all' ? STORAGE_TIERS : [selectedTier.value]);
+const visibleTiers = computed(() => selectedTiers.value.length > 0
+  ? STORAGE_TIERS.filter((tier) => selectedTiers.value.includes(tier))
+  : STORAGE_TIERS
+);
 
 const filteredData = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
@@ -66,8 +80,12 @@ const filteredData = computed(() => {
     ].some((value) => String(value || '').toLowerCase().includes(keyword));
 
     const matchedCurrency = selectedCurrency.value === 'all' || country.Currency === selectedCurrency.value;
-    const matchedTier = selectedTier.value === 'all' || country.Plans.some((plan) => plan.Name === selectedTier.value);
-    const matchedBest = !onlyBestPrices.value || country.Plans.some((plan) => plan.PriceInCNY === props.bestPrices[plan.Name]);
+    const matchedTier = selectedTiers.value.length === 0 || selectedTiers.value.every((tier) =>
+      country.Plans.some((plan) => plan.Name === tier)
+    );
+    const matchedBest = !onlyBestPrices.value || country.Plans.some((plan) =>
+      visibleTiers.value.includes(plan.Name) && plan.PriceInCNY === props.bestPrices[plan.Name]
+    );
 
     return matchedKeyword && matchedCurrency && matchedTier && matchedBest;
   });
@@ -78,11 +96,30 @@ const exportData = computed(() => filteredData.value.map((country) => ({
   Plans: country.Plans.filter((plan) => visibleTiers.value.includes(plan.Name))
 })));
 
+const paginatedData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredData.value.slice(start, start + pageSize.value);
+});
+
+watch([searchKeyword, selectedTiers, selectedCurrency, onlyBestPrices], () => {
+  currentPage.value = 1;
+}, { deep: true });
+
+watch(() => filteredData.value.length, (total) => {
+  const lastPage = Math.max(1, Math.ceil(total / pageSize.value));
+  if (currentPage.value > lastPage) currentPage.value = lastPage;
+});
+
+watch(pageSize, () => {
+  currentPage.value = 1;
+});
+
 const resetFilters = () => {
   searchKeyword.value = '';
-  selectedTier.value = 'all';
+  selectedTiers.value = [];
   selectedCurrency.value = 'all';
   onlyBestPrices.value = false;
+  currentPage.value = 1;
 };
 </script>
 
@@ -103,36 +140,65 @@ const resetFilters = () => {
 
   <!-- Data Table -->
   <div v-else class="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4">
-    <div class="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
-      <div class="flex flex-col sm:flex-row gap-2 flex-1">
-        <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="max-w-full sm:max-w-64" />
-        <el-select v-model="selectedTier" class="w-full sm:w-36">
-          <el-option value="all" :label="labels.allPlans" />
+    <div class="mb-4 space-y-3">
+      <div class="flex gap-2">
+        <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="flex-1 lg:max-w-64" />
+        <button
+          type="button"
+          class="btn-filter-action lg:hidden shrink-0"
+          @click="showMobileFilters = !showMobileFilters"
+        >
+          {{ showMobileFilters ? labels.hideFilters : labels.showFilters }}
+        </button>
+      </div>
+
+      <div
+        class="flex-col gap-2 lg:flex lg:flex-row lg:items-center"
+        :class="showMobileFilters ? 'flex' : 'hidden'"
+      >
+        <el-select
+          v-model="selectedTiers"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          clearable
+          :placeholder="labels.allPlans"
+          class="w-full lg:w-52"
+        >
           <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
         </el-select>
-        <el-select v-model="selectedCurrency" filterable class="w-full sm:w-40">
+        <el-select v-model="selectedCurrency" filterable class="w-full lg:w-40">
           <el-option value="all" :label="labels.allCurrencies" />
           <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
         </el-select>
-        <el-checkbox v-model="onlyBestPrices" class="!mr-0">{{ labels.onlyBestPrices }}</el-checkbox>
+        <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ labels.onlyBestPrices }}</el-checkbox>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs text-[#86868b]">
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[#86868b]">
         <span>{{ labels.visibleRows }}: {{ filteredData.length }} / {{ labels.totalRows }}: {{ data.length }}</span>
-        <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
-        <button class="btn-filter-action" @click="emit('export-csv', { data: exportData, tiers: visibleTiers })">{{ labels.exportCsv }}</button>
-        <button class="btn-filter-action" @click="emit('export-json', exportData)">{{ labels.exportJson }}</button>
+        <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+          <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
+          <button class="btn-filter-action" :disabled="refreshing" @click="emit('refresh')">
+            {{ refreshing ? labels.refreshingPricingData : labels.refreshPricing }}
+          </button>
+          <button class="btn-filter-action" :disabled="exporting" @click="emit('export-csv', { data: exportData, tiers: visibleTiers })">
+            {{ labels.exportCsv }}
+          </button>
+          <button class="btn-filter-action" :disabled="exporting" @click="emit('export-json', exportData)">
+            {{ labels.exportJson }}
+          </button>
+        </div>
       </div>
     </div>
 
     <el-empty v-if="filteredData.length === 0" :description="labels.noMatchingData" />
 
     <div v-else class="pricing-export-area">
-      <el-table :data="filteredData" style="width: 100%" :row-class-name="() => 'transition-colors'">
+      <el-table :data="paginatedData" style="width: 100%" :row-class-name="() => 'transition-colors'">
       <el-table-column fixed prop="CountryZH" :label="labels.region" min-width="120">
         <template #default="scope">
           <div class="flex items-center gap-2 md:gap-3">
-            <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ scope.$index + 1 }}</span>
+            <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ (currentPage - 1) * pageSize + scope.$index + 1 }}</span>
             <div class="flex flex-col min-w-0">
               <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.LocalizedCountryZH || scope.row.CountryZH }}</span>
             </div>
@@ -185,12 +251,28 @@ const resetFilters = () => {
         </el-table-column>
       </el-table>
     </div>
+
+    <div v-if="filteredData.length > 20" class="flex justify-center mt-4 overflow-x-auto pb-1">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="filteredData.length"
+        layout="sizes, prev, pager, next"
+        small
+        background
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .btn-filter-action {
   @apply px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white transition-colors;
+}
+
+.btn-filter-action:disabled {
+  @apply opacity-50 cursor-wait hover:bg-gray-100 dark:hover:bg-white/10;
 }
 
 :deep(.el-table) {

@@ -9,7 +9,7 @@ const downloadBlob = (content, filename, type) => {
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 };
 
 const encodeUtf16Le = (content) => {
@@ -32,7 +32,7 @@ const downloadTextFile = (content, filename, type) => {
   link.href = url;
   link.download = filename;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 };
 
 const normalizeCsvCell = (value) => {
@@ -124,9 +124,6 @@ export function useExport() {
       // 生成带有当前日期的文件名
       link.download = `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.png`;
       link.click();
-    } catch (err) {
-      console.error('图片导出失败:', err);
-      alert('IMAGE EXPORT FAILED');
     } finally {
       styledNodes.forEach(({ node, originalStyle }) => {
         if (originalStyle) {
@@ -151,7 +148,7 @@ export function useExport() {
 
     downloadTextFile(
       [headers.map(escapeCsvCell).join('\t'), ...rows].join('\r\n'),
-      `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.csv`,
+      `icloud-pricing-${tiers.join('-')}-${new Date().toISOString().slice(0,10)}.csv`,
       'text/csv;charset=utf-16le'
     );
   };

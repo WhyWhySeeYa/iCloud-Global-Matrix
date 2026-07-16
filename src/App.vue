@@ -4,6 +4,7 @@
  * @description 主应用组件，负责视图渲染和组合各个业务逻辑 Hook
  */
 import { computed, ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { useTheme } from './composables/useTheme.js';
 import { usePricingData } from './composables/usePricingData.js';
 import { useExport } from './composables/useExport.js';
@@ -15,6 +16,7 @@ import PricingTable from './components/PricingTable.vue';
 
 // --- DOM 引用 ---
 const tableContainer = ref(null); // 表格 DOM 容器的引用，用于截图导出
+const exporting = ref(false);
 
 // --- 组合式 API (Hooks) 引入 ---
 
@@ -40,12 +42,19 @@ const pricingTableLabels = computed(() => ({
   totalRows: t('totalRows'),
   noMatchingData: t('noMatchingData'),
   exportCsv: t('exportCsv'),
-  exportJson: t('exportJson')
+  exportJson: t('exportJson'),
+  exporting: t('exporting'),
+  filters: t('filters'),
+  showFilters: t('showFilters'),
+  hideFilters: t('hideFilters'),
+  refreshPricing: t('refreshPricing'),
+  refreshingPricingData: t('refreshingPricingData')
 }));
 
 // 3. 核心业务数据逻辑 (获取、解析、排序)
 const { 
   loading, 
+  refreshing,
   loadingText, 
   error, 
   sortTier, 
@@ -66,7 +75,7 @@ const localizedSortedData = computed(() => sortedData.value.map((item) => ({
 const dataStatusLabel = computed(() => {
   if (!meta.value) return '';
   if (meta.value.isFallback) return t('fallbackData');
-  if (['memory', 'stale'].includes(meta.value.cacheStatus)) return t('cachedData');
+  if (['memory', 'stale', 'persistent', 'persistent-stale'].includes(meta.value.cacheStatus)) return t('cachedData');
   return t('liveData');
 });
 
@@ -77,25 +86,36 @@ const { saveAsImage, saveAsCsv, saveAsJson } = useExport();
  * 触发图片导出
  * 将 DOM 引用和当前主题状态传递给导出 Hook
  */
+const runExport = async (task) => {
+  if (exporting.value) return;
+
+  exporting.value = true;
+  try {
+    await task();
+    ElMessage.success(t('exportSuccess'));
+  } catch (error) {
+    console.error('导出失败:', error);
+    ElMessage.error(t('exportFailed'));
+  } finally {
+    exporting.value = false;
+  }
+};
+
 const handleExport = () => {
-  // 注意：这里传递的是 PricingTable 组件根元素的引用
-  // 如果 PricingTable 内部有多个根元素，可能需要调整 ref 的绑定位置
-  // 目前 PricingTable 使用 v-if/v-else 切换根元素，但在导出时通常是数据已加载状态
-  // 建议在 PricingTable 内部暴露具体的表格容器 ref，或者确保导出时 DOM 结构稳定
-  
-  // 简单起见，我们这里假设 tableContainer 指向的是包含表格的 div
-  // 由于 PricingTable 内部有 v-if，我们需要确保获取到的是实际的表格容器
-  // 更好的做法是在 PricingTable 内部暴露一个方法或 ref，但为了保持父子组件解耦，
-  // 我们这里通过 ref 获取组件实例，或者直接在父组件包裹一层 div 用于截图
-  saveAsImage(tableContainer.value, isDark.value);
+  runExport(() => saveAsImage(tableContainer.value, isDark.value));
 };
 
 const handleExportCsv = ({ data, tiers }) => {
-  saveAsCsv(data, tiers);
+  runExport(() => saveAsCsv(data, tiers));
 };
 
 const handleExportJson = (data) => {
-  saveAsJson({ meta: meta.value, data });
+  runExport(() => saveAsJson({ meta: meta.value, data }));
+};
+
+const handleRefresh = async () => {
+  const success = await fetchData({ force: true });
+  if (success) ElMessage.success(t('refreshSuccess'));
 };
 
 // --- 生命周期钩子 ---
@@ -118,6 +138,7 @@ onMounted(() => {
       :locale="locale"
       :available-locales="availableLocales"
       :locale-label="currentLocaleLabel"
+      :exporting="exporting"
       @toggle-theme="toggleTheme"
       @set-locale="setLocale"
       @export="handleExport"
@@ -136,6 +157,8 @@ onMounted(() => {
           :data="localizedSortedData"
           :loading="loading"
           :loading-text="loadingText"
+          :refreshing="refreshing"
+          :exporting="exporting"
           :error="error"
           :sort-tier="sortTier"
           :is-asc="isAsc"
@@ -144,6 +167,7 @@ onMounted(() => {
           @toggle-sort="toggleSort"
           @export-csv="handleExportCsv"
           @export-json="handleExportJson"
+          @refresh="handleRefresh"
         />
       </div>
 

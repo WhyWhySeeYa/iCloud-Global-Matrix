@@ -7,11 +7,14 @@
 - 展示不同国家/地区的 iCloud+ 存储套餐价格
 - 自动换算人民币价格
 - 支持按容量套餐排序
-- 支持地区/货币搜索筛选、套餐筛选和最低价筛选
+- 支持地区/货币搜索筛选、套餐多选和最低价筛选，移动端可折叠筛选栏
+- 支持分页浏览和每页数量切换
 - 支持暗色/亮色主题切换
-- 支持导出价格表图片、CSV 和 JSON
+- 使用 Vue I18n 提供简体中文、繁体中文和英文界面
+- 支持导出价格表图片、CSV 和 JSON，并提供导出状态和结果提示
+- 支持手动刷新实时价格
 - 通过 Vercel Serverless Function 在服务端抓取和解析价格数据
-- 支持服务端内存缓存、过期缓存兜底和内置兜底价格数据
+- 支持服务端内存缓存、Upstash Redis 持久化缓存、过期缓存兜底和内置兜底价格数据
 
 ## 技术栈
 
@@ -19,6 +22,7 @@
 - Vite
 - Tailwind CSS
 - Element Plus
+- Vue I18n
 - Vercel Serverless Function
 
 ## 本地开发
@@ -74,14 +78,16 @@ copy .env.example .env.local
 
 | 变量 | 说明 | 默认值 |
 | --- | --- | --- |
-| `VITE_DEFAULT_LOCALE` | 可选语言数组，使用 JSON 数组配置，默认覆盖全球常用语言，支持任意 BCP 47 语言区域代码；语言选择菜单会按数组顺序展示 | 全球常用语言数组 |
+| `VITE_DEFAULT_LOCALE` | 默认界面语言，可选 `zh-CN`、`zh-TW` 或 `en-US` | `zh-CN` |
 | `VITE_APP_TITLE` | 顶部导航栏标题 | `iCloud+ Pricing` |
 | `VITE_HERO_TITLE` | 页面主标题 | `Global Pricing Matrix.` |
 | `VITE_HERO_SUBTITLE` | 页面副标题 | `Compare iCloud+ storage plans across different regions and currencies in real-time.` |
+| `UPSTASH_REDIS_REST_URL` | 可选，Upstash Redis REST 地址，用于持久化最近一次成功数据 | 空 |
+| `UPSTASH_REDIS_REST_TOKEN` | 可选，Upstash Redis REST Token | 空 |
 
 > Vite 环境变量必须以 `VITE_` 开头。线上部署时可在 Vercel 项目设置的 `Environment Variables` 中配置。
 >
-> `VITE_DEFAULT_LOCALE` 示例：`["en-US","zh-CN","zh-TW","ja-JP","ko-KR","fr-FR","de-DE","es-ES","it-IT","pt-BR","pt-PT","ru-RU","ar-SA","hi-IN","id-ID","ms-MY","th-TH","vi-VN","tr-TR","nl-NL","pl-PL","sv-SE","da-DK","no-NO","fi-FI","cs-CZ","hu-HU","ro-RO","el-GR","he-IL","uk-UA","sk-SK","hr-HR","bg-BG","ca-ES"]`。国家/地区名称会使用浏览器内置 `Intl.DisplayNames` 按当前语言自动本地化；界面固定文案目前提供中文和英文，其他语言会回退为英文。
+> 项目使用 Vue I18n，翻译文件位于 `src/locales`。国家/地区名称继续使用浏览器内置 `Intl.DisplayNames` 按当前语言自动本地化。
 
 ## 服务端接口
 
@@ -110,8 +116,19 @@ api/pricing.js
 - 在服务端解析价格数据
 - 返回前端可直接渲染的结构化 JSON
 - 使用 6 小时内存缓存减少重复抓取
+- 配置 Upstash Redis 后，冷启动时可读取 6 小时内的持久化缓存，实时抓取失败时可使用 7 天内的持久化数据
 - 实时抓取失败时优先返回过期缓存，再返回 `api/fallback-pricing.js` 中的内置兜底数据
 - 返回 `cacheStatus`、`isFallback`、`updatedAt` 等元信息，方便前端展示数据状态
+
+## 测试
+
+运行价格解析器测试：
+
+```bash
+npm test
+```
+
+测试覆盖容量空格、逗号小数、重复套餐、未知地区、汇率缺失和空数据等场景。
 
 ## Vercel 部署教程
 

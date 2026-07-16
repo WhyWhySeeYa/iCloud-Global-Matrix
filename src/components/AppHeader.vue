@@ -31,6 +31,10 @@ defineProps({
   localeLabel: {
     type: String,
     required: true
+  },
+  exporting: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -67,7 +71,9 @@ defineEmits(['toggle-theme', 'set-locale', 'export']);
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <button @click="$emit('export')" class="btn-export">{{ exportLabel }}</button>
+        <button @click="$emit('export')" class="btn-export disabled:opacity-60 disabled:cursor-wait" :disabled="exporting">
+          {{ exporting ? '...' : exportLabel }}
+        </button>
       </div>
     </div>
   </header>
