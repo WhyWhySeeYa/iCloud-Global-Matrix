@@ -47,45 +47,10 @@ const searchKeyword = ref('');
 const selectedTier = ref('all');
 const selectedCurrency = ref('all');
 const onlyBestPrices = ref(false);
-const selectedBenchmark = ref('none');
 
 const currencyOptions = computed(() => [...new Set(props.data.map((item) => item.Currency).filter(Boolean))].sort());
 
-const countryOptions = computed(() => props.data
-  .map((country) => ({
-    value: country.CountryISO || country.Country,
-    label: country.LocalizedCountryZH || country.LocalizedCountry || country.CountryZH || country.Country,
-    currency: country.Currency
-  }))
-  .filter((country) => country.value && country.label)
-  .sort((a, b) => a.label.localeCompare(b.label)));
-
-const benchmarkCountry = computed(() => {
-  if (selectedBenchmark.value === 'none') return null;
-  return props.data.find((country) => (country.CountryISO || country.Country) === selectedBenchmark.value) || null;
-});
-
-const getPlan = (country, tier) => country?.Plans.find((plan) => plan.Name === tier);
-
-const getBenchmarkComparison = (country, tier) => {
-  const benchmarkPlan = getPlan(benchmarkCountry.value, tier);
-  const currentPlan = getPlan(country, tier);
-  const benchmarkPrice = benchmarkPlan?.PriceInCNY;
-  const currentPrice = currentPlan?.PriceInCNY;
-
-  if (!benchmarkCountry.value || !benchmarkPrice || !currentPrice || country === benchmarkCountry.value) return null;
-
-  const diff = currentPrice - benchmarkPrice;
-  const percent = benchmarkPrice ? (diff / benchmarkPrice) * 100 : 0;
-
-  return {
-    diff,
-    percent,
-    isHigher: diff > 0,
-    isLower: diff < 0,
-    text: `${diff > 0 ? '+' : ''}${percent.toFixed(1)}%`
-  };
-};
+const visibleTiers = computed(() => selectedTier.value === 'all' ? STORAGE_TIERS : [selectedTier.value]);
 
 const filteredData = computed(() => {
   const keyword = searchKeyword.value.trim().toLowerCase();
@@ -108,11 +73,15 @@ const filteredData = computed(() => {
   });
 });
 
+const exportData = computed(() => filteredData.value.map((country) => ({
+  ...country,
+  Plans: country.Plans.filter((plan) => visibleTiers.value.includes(plan.Name))
+})));
+
 const resetFilters = () => {
   searchKeyword.value = '';
   selectedTier.value = 'all';
   selectedCurrency.value = 'all';
-  selectedBenchmark.value = 'none';
   onlyBestPrices.value = false;
 };
 </script>
@@ -145,23 +114,14 @@ const resetFilters = () => {
           <el-option value="all" :label="labels.allCurrencies" />
           <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
         </el-select>
-        <el-select v-model="selectedBenchmark" filterable class="w-full sm:w-52" :placeholder="labels.benchmarkPlaceholder">
-          <el-option value="none" :label="labels.noBenchmark" />
-          <el-option
-            v-for="country in countryOptions"
-            :key="country.value"
-            :value="country.value"
-            :label="`${country.label} (${country.currency})`"
-          />
-        </el-select>
         <el-checkbox v-model="onlyBestPrices" class="!mr-0">{{ labels.onlyBestPrices }}</el-checkbox>
       </div>
 
       <div class="flex flex-wrap items-center gap-2 text-xs text-[#86868b]">
         <span>{{ labels.visibleRows }}: {{ filteredData.length }} / {{ labels.totalRows }}: {{ data.length }}</span>
         <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
-        <button class="btn-filter-action" @click="emit('export-csv', filteredData)">{{ labels.exportCsv }}</button>
-        <button class="btn-filter-action" @click="emit('export-json', filteredData)">{{ labels.exportJson }}</button>
+        <button class="btn-filter-action" @click="emit('export-csv', { data: exportData, tiers: visibleTiers })">{{ labels.exportCsv }}</button>
+        <button class="btn-filter-action" @click="emit('export-json', exportData)">{{ labels.exportJson }}</button>
       </div>
     </div>
 
@@ -186,7 +146,7 @@ const resetFilters = () => {
         </template>
       </el-table-column>
 
-      <el-table-column v-for="tier in STORAGE_TIERS" :key="tier" :label="tier" align="center" min-width="120">
+      <el-table-column v-for="tier in visibleTiers" :key="tier" :label="tier" align="center" min-width="120">
         <template #header>
           <div class="flex items-center justify-center gap-1.5 cursor-pointer select-none group"
                @click="emit('toggle-sort', tier)"
@@ -219,15 +179,6 @@ const resetFilters = () => {
               <span v-if="scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY">
                 ¥{{ scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY.toFixed(2) }}
               </span>
-            </span>
-            <span v-if="getBenchmarkComparison(scope.row, tier)"
-                  class="text-[10px] mt-0.5 font-medium"
-                  :class="{
-                    'text-red-500 dark:text-red-400': getBenchmarkComparison(scope.row, tier).isHigher,
-                    'text-green-600 dark:text-green-400': getBenchmarkComparison(scope.row, tier).isLower,
-                    'text-[#86868b]': !getBenchmarkComparison(scope.row, tier).isHigher && !getBenchmarkComparison(scope.row, tier).isLower
-                  }">
-              {{ getBenchmarkComparison(scope.row, tier).text }}
             </span>
           </div>
         </template>

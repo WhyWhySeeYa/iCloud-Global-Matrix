@@ -4,7 +4,6 @@
  * @description 主应用组件，负责视图渲染和组合各个业务逻辑 Hook
  */
 import { computed, ref, onMounted } from 'vue';
-import { STORAGE_TIERS } from './config/constants.js';
 import { useTheme } from './composables/useTheme.js';
 import { usePricingData } from './composables/usePricingData.js';
 import { useExport } from './composables/useExport.js';
@@ -40,8 +39,6 @@ const pricingTableLabels = computed(() => ({
   visibleRows: t('visibleRows'),
   totalRows: t('totalRows'),
   noMatchingData: t('noMatchingData'),
-  benchmarkPlaceholder: t('benchmarkPlaceholder'),
-  noBenchmark: t('noBenchmark'),
   exportCsv: t('exportCsv'),
   exportJson: t('exportJson')
 }));
@@ -93,8 +90,8 @@ const handleExport = () => {
   saveAsImage(tableContainer.value, isDark.value);
 };
 
-const handleExportCsv = (data) => {
-  saveAsCsv(data, STORAGE_TIERS);
+const handleExportCsv = ({ data, tiers }) => {
+  saveAsCsv(data, tiers);
 };
 
 const handleExportJson = (data) => {

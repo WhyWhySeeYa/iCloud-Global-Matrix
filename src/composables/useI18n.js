@@ -41,8 +41,6 @@ const messages = {
     cachedData: 'Cached Data',
     liveData: 'Live Data',
     noMatchingData: 'No matching data',
-    benchmarkPlaceholder: 'Benchmark region',
-    noBenchmark: 'No benchmark',
     exportCsv: 'CSV',
     exportJson: 'JSON'
   },
@@ -73,8 +71,6 @@ const messages = {
     cachedData: '缓存数据',
     liveData: '实时数据',
     noMatchingData: '没有匹配数据',
-    benchmarkPlaceholder: '对标地区',
-    noBenchmark: '不对标',
     exportCsv: 'CSV',
     exportJson: 'JSON'
   }
