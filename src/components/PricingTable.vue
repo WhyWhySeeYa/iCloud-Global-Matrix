@@ -163,12 +163,18 @@ const rowIndex = (index) => (props.exportingImage ? index + 1 : (currentPage.val
   <!-- Data Table -->
   <div v-else class="bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden transition-colors duration-300 p-2 md:p-4">
     <div class="mb-4 space-y-3">
-      <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
-        <div class="flex gap-2 lg:w-64 lg:shrink-0">
-          <el-input v-model="searchKeyword" clearable :placeholder="t('searchPlaceholder')" class="flex-1" />
+      <!-- 桌面端强制单行；移动端搜索单独一行，筛选可折叠 -->
+      <div class="flex flex-col gap-2 md:flex-row md:flex-nowrap md:items-center">
+        <div class="flex min-w-0 flex-1 gap-2 md:max-w-xs md:flex-none">
+          <el-input
+            v-model="searchKeyword"
+            clearable
+            :placeholder="t('searchPlaceholder')"
+            class="filter-control min-w-0 flex-1"
+          />
           <button
             type="button"
-            class="btn-filter-action lg:hidden shrink-0"
+            class="btn-filter-action md:hidden shrink-0"
             @click="showMobileFilters = !showMobileFilters"
           >
             {{ showMobileFilters ? t('hideFilters') : t('showFilters') }}
@@ -176,31 +182,37 @@ const rowIndex = (index) => (props.exportingImage ? index + 1 : (currentPage.val
         </div>
 
         <div
-          class="flex-col gap-2 lg:flex lg:flex-row lg:items-center lg:flex-1"
+          class="min-w-0 flex-col gap-2 md:flex md:flex-1 md:flex-row md:flex-nowrap md:items-center"
           :class="showMobileFilters ? 'flex' : 'hidden'"
         >
-          <el-select
-            v-model="selectedTiers"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            clearable
-            :placeholder="t('allPlans')"
-            class="w-full lg:w-52"
-          >
-            <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
-          </el-select>
-          <el-select v-model="selectedCurrency" filterable class="w-full lg:w-40">
-            <el-option value="all" :label="t('allCurrencies')" />
-            <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
-          </el-select>
-          <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ t('onlyBestPrices') }}</el-checkbox>
+          <div class="filter-control w-full md:w-44 md:shrink-0">
+            <el-select
+              v-model="selectedTiers"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              clearable
+              :placeholder="t('allPlans')"
+              class="w-full"
+            >
+              <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
+            </el-select>
+          </div>
+          <div class="filter-control w-full md:w-36 md:shrink-0">
+            <el-select v-model="selectedCurrency" filterable class="w-full">
+              <el-option value="all" :label="t('allCurrencies')" />
+              <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
+            </el-select>
+          </div>
+          <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8 shrink-0 whitespace-nowrap">
+            {{ t('onlyBestPrices') }}
+          </el-checkbox>
         </div>
       </div>
 
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[#86868b]">
-        <span>{{ t('visibleRows') }}: {{ filteredData.length }} / {{ t('totalRows') }}: {{ data.length }}</span>
-        <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        <span class="shrink-0">{{ t('visibleRows') }}: {{ filteredData.length }} / {{ t('totalRows') }}: {{ data.length }}</span>
+        <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-nowrap">
           <button class="btn-filter-action" @click="resetFilters">{{ t('resetFilters') }}</button>
           <button class="btn-filter-action" :disabled="refreshing" @click="emit('refresh')">
             {{ refreshing ? t('refreshingPricingData') : t('refreshPricing') }}
@@ -307,11 +319,22 @@ const rowIndex = (index) => (props.exportingImage ? index + 1 : (currentPage.val
 
 <style scoped>
 .btn-filter-action {
-  @apply px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white transition-colors;
+  @apply px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-white/10 dark:hover:bg-white/15 text-[#1d1d1f] dark:text-white transition-colors whitespace-nowrap;
 }
 
 .btn-filter-action:disabled {
   @apply opacity-50 cursor-wait hover:bg-gray-100 dark:hover:bg-white/10;
+}
+
+/* 约束 Element Plus 控件宽度，避免桌面端把筛选栏撑换行 */
+.filter-control :deep(.el-input),
+.filter-control :deep(.el-select),
+.filter-control :deep(.el-select__wrapper) {
+  width: 100%;
+}
+
+.filter-control :deep(.el-select) {
+  min-width: 0;
 }
 
 :deep(.el-table) {
