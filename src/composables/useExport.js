@@ -42,11 +42,17 @@ const normalizeCsvCell = (value) => {
 
 const escapeCsvCell = (value) => `"${normalizeCsvCell(value).replace(/"/g, '""')}"`;
 
+const waitForNextPaint = () => new Promise((resolve) => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(resolve);
+  });
+});
+
 export function useExport() {
   /**
    * 将指定的 DOM 容器导出为 PNG 图片
    * 包含处理移动端横向滚动截断问题的特殊逻辑
-   * 
+   *
    * @param {HTMLElement} containerRef - 需要导出的 DOM 元素引用
    * @param {boolean} isDark - 当前是否为暗色主题 (用于设置截图背景色)
    */
@@ -58,7 +64,7 @@ export function useExport() {
     try {
       const { default: html2canvas } = await import('html2canvas');
       const el = containerRef.querySelector('.pricing-export-area') || containerRef;
-      
+
       // 1. 临时展开 Element Plus 表格内部滚动容器，避免只截到当前可视区域
       const tableBody = el.querySelector('.el-table__body-wrapper .el-table__body');
       const tableBodyWrapper = el.querySelector('.el-table__body-wrapper');
@@ -85,9 +91,9 @@ export function useExport() {
       styledNodes.forEach(({ node, originalStyle, style }) => {
         node.setAttribute('style', `${originalStyle || ''} ${style}`);
       });
-      
-      // 2. 等待 Vue 和 Element Plus 重新计算布局并渲染后，再按真实内容高度截图
-      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // 2. 等待浏览器完成两帧布局后再按真实内容高度截图
+      await waitForNextPaint();
 
       const fullTableHeight = (tableHeaderWrapper?.offsetHeight || 0) + Math.max(
         tableBody?.offsetHeight || 0,
@@ -105,23 +111,21 @@ export function useExport() {
 
       // 3. 执行截图
       const canvas = await html2canvas(el, {
-        scale: 2, // 提高截图清晰度 (Retina 屏幕标准)
-        backgroundColor: isDark ? '#1c1c1e' : '#ffffff', // 根据当前主题设置背景色
-        useCORS: true, // 允许加载跨域图片 (如果有的话)
-        logging: false, // 关闭 html2canvas 的控制台日志
-        width: targetWidth, // 显式指定截图的画布宽度
-        height: targetHeight, // 使用完整表格高度，避免最后一行文字被裁切
-        windowWidth: targetWidth, // 模拟浏览器窗口宽度，确保媒体查询等样式正确应用
+        scale: 2,
+        backgroundColor: isDark ? '#1c1c1e' : '#ffffff',
+        useCORS: true,
+        logging: false,
+        width: targetWidth,
+        height: targetHeight,
+        windowWidth: targetWidth,
         windowHeight: targetHeight,
         scrollX: 0,
         scrollY: 0,
       });
-      
-      // 7. 将 Canvas 转换为 Data URL 并触发下载
+
       const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = image;
-      // 生成带有当前日期的文件名
       link.download = `icloud-pricing-matrix-${new Date().toISOString().slice(0,10)}.png`;
       link.click();
     } finally {
@@ -140,7 +144,7 @@ export function useExport() {
     const rows = data.map((country) => {
       const values = [country.LocalizedCountryZH || country.LocalizedCountry || country.CountryZH || country.Country];
       tiers.forEach((tier) => {
-        const plan = country.Plans.find((item) => item.Name === tier);
+        const plan = country.PlansByName?.[tier] || country.Plans.find((item) => item.Name === tier);
         values.push(plan?.Price || '', plan?.PriceInCNY || '');
       });
       return values.map(escapeCsvCell).join('\t');

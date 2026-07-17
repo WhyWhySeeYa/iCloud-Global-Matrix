@@ -6,14 +6,22 @@ import { ref, computed } from 'vue';
 import { STORAGE_TIERS } from '../config/constants.js';
 import { fetchPricingData } from '../api/index.js';
 
+const indexPlans = (countries) => countries.map((country) => {
+  const PlansByName = Object.fromEntries(
+    (country.Plans || []).map((plan) => [plan.Name, plan])
+  );
+  return { ...country, PlansByName };
+});
+
 export function usePricingData(t) {
   // --- 响应式状态 ---
-  const rawData = ref([]); // 原始解析数据
+  const rawData = ref([]); // 原始解析数据（含 PlansByName 索引）
   const loading = ref(true); // 加载状态
   const refreshing = ref(false); // 手动刷新状态
   const loadingText = ref(t('initializing')); // 加载提示
   const error = ref(null); // 错误信息
   const meta = ref(null); // 服务端数据元信息
+  let inFlight = null; // 进行中的请求，防止并发刷新
 
   // --- 排序状态 ---
   const sortTier = ref('50GB'); // 当前排序层级
@@ -23,28 +31,34 @@ export function usePricingData(t) {
    * 核心业务流程：获取并解析数据
    */
   const fetchData = async ({ force = false } = {}) => {
+    if (inFlight) return inFlight;
+
     if (force) {
       refreshing.value = true;
     } else {
       loading.value = true;
     }
     error.value = null;
-    
-    try {
-      // 1. 从服务端获取已经抓取、解析并计算好的价格数据
-      loadingText.value = t(force ? 'refreshingPricingData' : 'fetchingPricingData');
-      const payload = await fetchPricingData({ force });
-      rawData.value = payload.data;
-      meta.value = payload.meta;
-      return true;
-    } catch (err) {
-      console.error('数据处理失败:', err);
-      error.value = t('dataFetchFailed');
-      return false;
-    } finally {
-      loading.value = false;
-      refreshing.value = false;
-    }
+
+    inFlight = (async () => {
+      try {
+        loadingText.value = t(force ? 'refreshingPricingData' : 'fetchingPricingData');
+        const payload = await fetchPricingData({ force });
+        rawData.value = indexPlans(payload.data || []);
+        meta.value = payload.meta;
+        return true;
+      } catch (err) {
+        console.error('数据处理失败:', err);
+        error.value = t('dataFetchFailed');
+        return false;
+      } finally {
+        loading.value = false;
+        refreshing.value = false;
+        inFlight = null;
+      }
+    })();
+
+    return inFlight;
   };
 
   /**
@@ -52,13 +66,11 @@ export function usePricingData(t) {
    */
   const bestPrices = computed(() => {
     const best = {};
-    STORAGE_TIERS.forEach(tier => {
+    STORAGE_TIERS.forEach((tier) => {
       let min = Infinity;
-      rawData.value.forEach(country => {
-        const plan = country.Plans.find(p => p.Name === tier);
-        if (plan && plan.PriceInCNY < min && plan.PriceInCNY > 0) {
-          min = plan.PriceInCNY;
-        }
+      rawData.value.forEach((country) => {
+        const price = country.PlansByName[tier]?.PriceInCNY;
+        if (price > 0 && price < min) min = price;
       });
       best[tier] = min;
     });
@@ -69,10 +81,12 @@ export function usePricingData(t) {
    * 根据当前排序条件返回排序后的数据
    */
   const sortedData = computed(() => {
+    const tier = sortTier.value;
+    const asc = isAsc.value;
     return [...rawData.value].sort((a, b) => {
-      const priceA = a.Plans.find(p => p.Name === sortTier.value)?.PriceInCNY || Infinity;
-      const priceB = b.Plans.find(p => p.Name === sortTier.value)?.PriceInCNY || Infinity;
-      return isAsc.value ? priceA - priceB : priceB - priceA;
+      const priceA = a.PlansByName[tier]?.PriceInCNY ?? Infinity;
+      const priceB = b.PlansByName[tier]?.PriceInCNY ?? Infinity;
+      return asc ? priceA - priceB : priceB - priceA;
     });
   });
 
@@ -89,6 +103,16 @@ export function usePricingData(t) {
     }
   };
 
+  /**
+   * 直接设置排序状态（用于从 URL 恢复）
+   */
+  const setSortState = (tier, asc = true) => {
+    if (STORAGE_TIERS.includes(tier)) {
+      sortTier.value = tier;
+    }
+    isAsc.value = Boolean(asc);
+  };
+
   return {
     loading,
     refreshing,
@@ -100,6 +124,7 @@ export function usePricingData(t) {
     bestPrices,
     meta,
     fetchData,
-    toggleSort
+    toggleSort,
+    setSortState
   };
 }

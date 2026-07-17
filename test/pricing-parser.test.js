@@ -87,3 +87,20 @@ test('兼容英文冒号、HTML 实体和套餐脚注', () => {
   assert.equal(country.CountryISO, 'US');
   assert.deepEqual(country.Plans.map((plan) => plan.Name), ['50GB', '200GB']);
 });
+
+test('解码常见 HTML 实体后再解析价格', () => {
+  const html = `
+    <h3>台湾（新台币）</h3>
+    <p>50GB：NT$&nbsp;30</p>
+    <p>200GB：NT$&amp;90</p>
+    <p>2TB：&quot;290&quot;</p>
+  `;
+
+  const [country] = parsePricingHtml(html, { TWD: 4.5 });
+
+  assert.equal(country.CountryISO, 'TW');
+  assert.equal(country.Plans.find((plan) => plan.Name === '50GB')?.Price, '30');
+  assert.equal(country.Plans.find((plan) => plan.Name === '200GB')?.Price, '90');
+  assert.equal(country.Plans.find((plan) => plan.Name === '2TB')?.Price, '290');
+  assert.equal(country.Plans.find((plan) => plan.Name === '2TB')?.PriceInCNY, 64.44);
+});

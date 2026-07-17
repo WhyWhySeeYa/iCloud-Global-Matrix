@@ -1,4 +1,6 @@
-export const STORAGE_TIERS = ['50GB', '200GB', '2TB', '6TB', '12TB'];
+import { STORAGE_TIERS } from '../../shared/constants.js';
+
+export { STORAGE_TIERS };
 
 const countryMap = {
   '巴哈马': { iso: 'BS', en: 'Bahamas' }, '巴巴多斯': { iso: 'BB', en: 'Barbados' }, '巴西': { iso: 'BR', en: 'Brazil' }, '加拿大': { iso: 'CA', en: 'Canada' },
@@ -32,12 +34,12 @@ const currencyMap = {
 };
 
 const decodeHtmlEntities = (value) => value
-  .replace(/&nbsp;|&#160;/g, ' ')
-  .replace(/&/g, '&')
-  .replace(/</g, '<')
-  .replace(/>/g, '>')
-  .replace(/"/g, '"')
-  .replace(/'|'/g, "'");
+  .replace(/&nbsp;|&#160;/gi, ' ')
+  .replace(/&amp;/gi, '&')
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'");
 
 const htmlToTextLines = (html) => decodeHtmlEntities(html)
   .replace(/<script[\s\S]*?<\/script>/gi, '')

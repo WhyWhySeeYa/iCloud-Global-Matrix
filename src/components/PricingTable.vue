@@ -5,6 +5,8 @@
  */
 import { computed, ref, watch } from 'vue';
 import { STORAGE_TIERS } from '../config/constants.js';
+import { useI18n } from '../composables/useI18n.js';
+import { useTableQueryState } from '../composables/useTableQueryState.js';
 
 const props = defineProps({
   data: {
@@ -27,6 +29,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  exportingImage: {
+    type: Boolean,
+    default: false
+  },
   error: {
     type: String,
     default: null
@@ -42,22 +48,31 @@ const props = defineProps({
   bestPrices: {
     type: Object,
     required: true
-  },
-  labels: {
-    type: Object,
-    required: true
   }
 });
 
-const emit = defineEmits(['toggle-sort', 'export-csv', 'export-json', 'refresh']);
+const emit = defineEmits(['toggle-sort', 'export-csv', 'export-json', 'refresh', 'retry', 'set-sort']);
 
-const searchKeyword = ref('');
-const selectedTiers = ref([]);
-const selectedCurrency = ref('all');
-const onlyBestPrices = ref(false);
+const { t } = useI18n();
+
+const {
+  searchKeyword,
+  selectedTiers,
+  selectedCurrency,
+  onlyBestPrices,
+  currentPage,
+  pageSize,
+  resetFilters
+} = useTableQueryState({
+  getSortTier: () => props.sortTier,
+  getIsAsc: () => props.isAsc,
+  onRestoreSort: (tier, asc) => emit('set-sort', { tier, asc })
+});
+
 const showMobileFilters = ref(false);
-const currentPage = ref(1);
-const pageSize = ref(20);
+
+const getPlan = (country, tier) => country.PlansByName?.[tier]
+  || country.Plans?.find((plan) => plan.Name === tier);
 
 const currencyOptions = computed(() => [...new Set(props.data.map((item) => item.Currency).filter(Boolean))].sort());
 
@@ -81,11 +96,12 @@ const filteredData = computed(() => {
 
     const matchedCurrency = selectedCurrency.value === 'all' || country.Currency === selectedCurrency.value;
     const matchedTier = selectedTiers.value.length === 0 || selectedTiers.value.every((tier) =>
-      country.Plans.some((plan) => plan.Name === tier)
+      Boolean(getPlan(country, tier))
     );
-    const matchedBest = !onlyBestPrices.value || country.Plans.some((plan) =>
-      visibleTiers.value.includes(plan.Name) && plan.PriceInCNY === props.bestPrices[plan.Name]
-    );
+    const matchedBest = !onlyBestPrices.value || visibleTiers.value.some((tier) => {
+      const plan = getPlan(country, tier);
+      return plan && plan.PriceInCNY === props.bestPrices[tier];
+    });
 
     return matchedKeyword && matchedCurrency && matchedTier && matchedBest;
   });
@@ -93,10 +109,14 @@ const filteredData = computed(() => {
 
 const exportData = computed(() => filteredData.value.map((country) => ({
   ...country,
-  Plans: country.Plans.filter((plan) => visibleTiers.value.includes(plan.Name))
+  Plans: visibleTiers.value
+    .map((tier) => getPlan(country, tier))
+    .filter(Boolean)
 })));
 
-const paginatedData = computed(() => {
+// 图片导出时渲染全量筛选结果，与 CSV/JSON 数据范围一致；平时走分页
+const tableData = computed(() => {
+  if (props.exportingImage) return filteredData.value;
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredData.value.slice(start, start + pageSize.value);
 });
@@ -114,19 +134,21 @@ watch(pageSize, () => {
   currentPage.value = 1;
 });
 
-const resetFilters = () => {
-  searchKeyword.value = '';
-  selectedTiers.value = [];
-  selectedCurrency.value = 'all';
-  onlyBestPrices.value = false;
-  currentPage.value = 1;
-};
+const rowIndex = (index) => (props.exportingImage ? index + 1 : (currentPage.value - 1) * pageSize.value + index + 1);
 </script>
 
 <template>
   <!-- Error State -->
-  <div v-if="error" class="mb-8 p-4 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl text-center text-sm">
-    {{ error }}
+  <div v-if="error" class="mb-8 p-6 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-2xl text-center text-sm space-y-4">
+    <p>{{ error }}</p>
+    <button
+      type="button"
+      class="btn-filter-action !text-red-600 dark:!text-red-300"
+      :disabled="loading || refreshing"
+      @click="emit('retry')"
+    >
+      {{ refreshing || loading ? t('refreshingPricingData') : t('retry') }}
+    </button>
   </div>
 
   <!-- Loading State -->
@@ -143,13 +165,13 @@ const resetFilters = () => {
     <div class="mb-4 space-y-3">
       <div class="flex flex-col gap-2 lg:flex-row lg:items-center">
         <div class="flex gap-2 lg:w-64 lg:shrink-0">
-          <el-input v-model="searchKeyword" clearable :placeholder="labels.searchPlaceholder" class="flex-1" />
+          <el-input v-model="searchKeyword" clearable :placeholder="t('searchPlaceholder')" class="flex-1" />
           <button
             type="button"
             class="btn-filter-action lg:hidden shrink-0"
             @click="showMobileFilters = !showMobileFilters"
           >
-            {{ showMobileFilters ? labels.hideFilters : labels.showFilters }}
+            {{ showMobileFilters ? t('hideFilters') : t('showFilters') }}
           </button>
         </div>
 
@@ -163,98 +185,113 @@ const resetFilters = () => {
             collapse-tags
             collapse-tags-tooltip
             clearable
-            :placeholder="labels.allPlans"
+            :placeholder="t('allPlans')"
             class="w-full lg:w-52"
           >
             <el-option v-for="tier in STORAGE_TIERS" :key="tier" :value="tier" :label="tier" />
           </el-select>
           <el-select v-model="selectedCurrency" filterable class="w-full lg:w-40">
-            <el-option value="all" :label="labels.allCurrencies" />
+            <el-option value="all" :label="t('allCurrencies')" />
             <el-option v-for="currency in currencyOptions" :key="currency" :value="currency" :label="currency" />
           </el-select>
-          <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ labels.onlyBestPrices }}</el-checkbox>
+          <el-checkbox v-model="onlyBestPrices" class="!mr-0 min-h-8">{{ t('onlyBestPrices') }}</el-checkbox>
         </div>
       </div>
 
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-[#86868b]">
-        <span>{{ labels.visibleRows }}: {{ filteredData.length }} / {{ labels.totalRows }}: {{ data.length }}</span>
+        <span>{{ t('visibleRows') }}: {{ filteredData.length }} / {{ t('totalRows') }}: {{ data.length }}</span>
         <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <button class="btn-filter-action" @click="resetFilters">{{ labels.resetFilters }}</button>
+          <button class="btn-filter-action" @click="resetFilters">{{ t('resetFilters') }}</button>
           <button class="btn-filter-action" :disabled="refreshing" @click="emit('refresh')">
-            {{ refreshing ? labels.refreshingPricingData : labels.refreshPricing }}
+            {{ refreshing ? t('refreshingPricingData') : t('refreshPricing') }}
           </button>
           <button class="btn-filter-action" :disabled="exporting" @click="emit('export-csv', { data: exportData, tiers: visibleTiers })">
-            {{ labels.exportCsv }}
+            {{ t('exportCsv') }}
           </button>
           <button class="btn-filter-action" :disabled="exporting" @click="emit('export-json', exportData)">
-            {{ labels.exportJson }}
+            {{ t('exportJson') }}
           </button>
         </div>
       </div>
     </div>
 
-    <el-empty v-if="filteredData.length === 0" :description="labels.noMatchingData" />
+    <el-empty v-if="filteredData.length === 0" :description="t('noMatchingData')" />
 
     <div v-else class="pricing-export-area">
-      <el-table :data="paginatedData" style="width: 100%" :row-class-name="() => 'transition-colors'">
-      <el-table-column fixed prop="CountryZH" :label="labels.region" min-width="120">
-        <template #default="scope">
-          <div class="flex items-center gap-2 md:gap-3">
-            <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ (currentPage - 1) * pageSize + scope.$index + 1 }}</span>
-            <div class="flex flex-col min-w-0">
-              <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.LocalizedCountryZH || scope.row.CountryZH }}</span>
+      <el-table :data="tableData" style="width: 100%" :row-class-name="() => 'transition-colors'">
+        <el-table-column fixed prop="CountryZH" :label="t('region')" min-width="120">
+          <template #default="scope">
+            <div class="flex items-center gap-2 md:gap-3">
+              <span class="text-[#86868b] text-xs w-4 md:w-5 text-right shrink-0">{{ rowIndex(scope.$index) }}</span>
+              <div class="flex flex-col min-w-0">
+                <span class="font-medium text-[#1d1d1f] dark:text-white truncate">{{ scope.row.LocalizedCountryZH || scope.row.CountryZH }}</span>
+              </div>
             </div>
-          </div>
-        </template>
-      </el-table-column>
-      
-      <el-table-column prop="Currency" :label="labels.currency" align="center" min-width="120">
-        <template #default="scope">
-          <span class="text-xs text-[#86868b]">{{ scope.row.Currency }}</span>
-        </template>
-      </el-table-column>
+          </template>
+        </el-table-column>
 
-      <el-table-column v-for="tier in visibleTiers" :key="tier" :label="tier" align="center" min-width="120">
-        <template #header>
-          <div class="flex items-center justify-center gap-1.5 cursor-pointer select-none group"
-               @click="emit('toggle-sort', tier)"
-               :class="{'text-[#1d1d1f] dark:text-white': sortTier === tier, 'text-[#86868b]': sortTier !== tier}">
-            {{ tier }}
-            <div class="flex flex-col gap-[2px] opacity-0 group-hover:opacity-50 transition-opacity"
-                 :class="{'!opacity-100': sortTier === tier}">
-              <svg class="w-2 h-2" :class="{'text-[#0071e3]': sortTier === tier && isAsc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
-              <svg class="w-2 h-2" :class="{'text-[#0071e3]': sortTier === tier && !isAsc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+        <el-table-column prop="Currency" :label="t('currency')" align="center" min-width="120">
+          <template #default="scope">
+            <span class="text-xs text-[#86868b]">{{ scope.row.Currency }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column v-for="tier in visibleTiers" :key="tier" :label="tier" align="center" min-width="120">
+          <template #header>
+            <button
+              type="button"
+              class="flex items-center justify-center gap-1.5 cursor-pointer select-none group w-full bg-transparent border-0 p-0"
+              :class="{'text-[#1d1d1f] dark:text-white': sortTier === tier, 'text-[#86868b]': sortTier !== tier}"
+              :aria-sort="sortTier === tier ? (isAsc ? 'ascending' : 'descending') : 'none'"
+              @click="emit('toggle-sort', tier)"
+            >
+              {{ tier }}
+              <div
+                class="flex flex-col gap-[2px] opacity-0 group-hover:opacity-50 transition-opacity"
+                :class="{'!opacity-100': sortTier === tier}"
+              >
+                <svg class="w-2 h-2" :class="{'text-[#0071e3]': sortTier === tier && isAsc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                <svg class="w-2 h-2" :class="{'text-[#0071e3]': sortTier === tier && !isAsc}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+              </div>
+            </button>
+          </template>
+          <template #default="scope">
+            <div
+              v-for="plan in [getPlan(scope.row, tier)]"
+              :key="tier"
+              class="flex flex-col items-center justify-center w-full h-full"
+              :class="{'bg-gray-50/30 dark:bg-white/[0.01]': sortTier === tier}"
+            >
+              <template v-if="plan">
+                <div class="flex items-center gap-1.5">
+                  <span
+                    class="text-[#1d1d1f] dark:text-white"
+                    :class="{'font-medium': plan.PriceInCNY === bestPrices[tier]}"
+                  >
+                    {{ plan.Price }}
+                  </span>
+                  <span
+                    v-if="plan.PriceInCNY === bestPrices[tier]"
+                    class="flex h-1.5 w-1.5 rounded-full bg-[#0071e3]"
+                    :title="t('bestPrice')"
+                  />
+                </div>
+                <span
+                  v-if="plan.PriceInCNY"
+                  class="text-[11px] mt-0.5"
+                  :class="plan.PriceInCNY === bestPrices[tier] ? 'text-[#0071e3]' : 'text-[#86868b]'"
+                >
+                  ¥{{ plan.PriceInCNY.toFixed(2) }}
+                </span>
+              </template>
+              <span v-else class="text-gray-300 dark:text-gray-700">-</span>
             </div>
-          </div>
-        </template>
-        <template #default="scope">
-          <div class="flex flex-col items-center justify-center w-full h-full" :class="{'bg-gray-50/30 dark:bg-white/[0.01]': sortTier === tier}">
-            <div class="flex items-center gap-1.5">
-              <span class="text-[#1d1d1f] dark:text-white" :class="{'font-medium': scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY === bestPrices[tier]}">
-                <template v-if="scope.row.Plans.find(p => p.Name === tier)">
-                  {{ scope.row.Plans.find(p => p.Name === tier).Price }}
-                </template>
-                <template v-else><span class="text-gray-300 dark:text-gray-700">-</span></template>
-              </span>
-              
-              <span v-if="scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY === bestPrices[tier]"
-                    class="flex h-1.5 w-1.5 rounded-full bg-[#0071e3]" :title="labels.bestPrice">
-              </span>
-            </div>
-            
-            <span class="text-[11px] mt-0.5"
-                  :class="scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY === bestPrices[tier] ? 'text-[#0071e3]' : 'text-[#86868b]'">
-              <span v-if="scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY">
-                ¥{{ scope.row.Plans.find(p => p.Name === tier)?.PriceInCNY.toFixed(2) }}
-              </span>
-            </span>
-          </div>
-        </template>
+          </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <div v-if="filteredData.length > 20" class="flex justify-center mt-4 overflow-x-auto pb-1">
+    <div v-if="filteredData.length > 20 && !exportingImage" class="flex justify-center mt-4 overflow-x-auto pb-1">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"

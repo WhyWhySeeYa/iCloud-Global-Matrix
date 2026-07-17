@@ -29,7 +29,9 @@ export const fetchPricingData = async ({ force = false } = {}) => {
             cacheStatus: payload.cacheStatus,
             cacheAgeSeconds: payload.cacheAgeSeconds,
             isFallback: Boolean(payload.isFallback),
-            message: payload.message
+            message: payload.message,
+            countryCount: payload.countryCount ?? (payload.data || []).length,
+            ratesSource: payload.ratesSource || null
         }
     };
 };

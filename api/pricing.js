@@ -1,6 +1,13 @@
 import { FALLBACK_UPDATED_AT, fallbackPricingData } from './fallback-pricing.js';
 import { parsePricingHtml } from './lib/pricing-parser.js';
-import { readPersistentPricingCache, writePersistentPricingCache } from './lib/persistent-cache.js';
+import {
+  acquireRefreshLock,
+  readPersistentPricingCache,
+  readPersistentRatesCache,
+  releaseRefreshLock,
+  writePersistentPricingCache,
+  writePersistentRatesCache
+} from './lib/persistent-cache.js';
 
 const APPLE_PRICING_URL = 'https://support.apple.com/zh-cn/108047';
 const EXCHANGE_RATE_URL = 'https://open.er-api.com/v6/latest/CNY';
@@ -8,14 +15,17 @@ const MEMORY_CACHE_TTL = 1000 * 60 * 60 * 6;
 const STALE_CACHE_TTL = 1000 * 60 * 60 * 24;
 const PERSISTENT_STALE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7;
 const REQUEST_TIMEOUT = 1000 * 12;
+const REFRESH_COOLDOWN_MS = 1000 * 30;
 const APPLE_PRICING_FALLBACK_URLS = [
   APPLE_PRICING_URL,
   `https://corsproxy.io/?${encodeURIComponent(APPLE_PRICING_URL)}`,
   `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(APPLE_PRICING_URL)}`
 ];
 
-
 let memoryCache = null;
+let memoryRatesCache = null;
+let memoryRefreshLockUntil = 0;
+let inFlightRefresh = null;
 
 const cloneData = (data) => JSON.parse(JSON.stringify(data));
 
@@ -26,7 +36,9 @@ const createResponsePayload = (data, meta = {}) => ({
   resolvedSource: meta.resolvedSource || APPLE_PRICING_URL,
   cacheStatus: meta.cacheStatus || 'fresh',
   isFallback: Boolean(meta.isFallback),
-  message: meta.message || null
+  message: meta.message || null,
+  countryCount: Array.isArray(data) ? data.length : 0,
+  ratesSource: meta.ratesSource || null
 });
 
 const getValidCache = () => {
@@ -67,6 +79,16 @@ const setMemoryCache = (payload, cachedAt = Date.now()) => {
   };
 };
 
+const setMemoryRatesCache = (rates, source = 'live', updatedAt = new Date().toISOString()) => {
+  if (!rates || typeof rates !== 'object') return;
+  memoryRatesCache = { rates, source, updatedAt, cachedAt: Date.now() };
+};
+
+const getMemoryRates = () => {
+  if (!memoryRatesCache?.rates) return null;
+  return memoryRatesCache;
+};
+
 const decoratePersistentCache = (payload, { stale = false } = {}) => {
   if (!payload?.updatedAt) return null;
 
@@ -76,6 +98,7 @@ const decoratePersistentCache = (payload, { stale = false } = {}) => {
 
   return {
     ...payload,
+    countryCount: Array.isArray(payload.data) ? payload.data.length : 0,
     cacheStatus: stale ? 'persistent-stale' : 'persistent',
     cacheAgeSeconds: Math.round(age / 1000),
     message: stale ? 'Live pricing fetch failed. Serving persistent cached data.' : payload.message
@@ -145,6 +168,106 @@ const fetchApplePricingHtml = async () => {
   throw new Error(`Unable to fetch Apple pricing page. ${errors.join(' | ')}`);
 };
 
+/**
+ * 独立获取汇率：优先实时，失败回落到内存/Redis 缓存，不阻塞 HTML 抓取。
+ */
+const resolveExchangeRates = async () => {
+  try {
+    const rateData = await fetchJson(EXCHANGE_RATE_URL);
+    const rates = rateData.rates || {};
+    if (Object.keys(rates).length === 0) {
+      throw new Error('Exchange rate response is empty');
+    }
+
+    const payload = {
+      rates,
+      updatedAt: new Date().toISOString(),
+      source: 'live'
+    };
+    setMemoryRatesCache(rates, 'live', payload.updatedAt);
+    await writePersistentRatesCache(payload);
+    return { rates, ratesSource: 'live' };
+  } catch (error) {
+    console.error('Failed to fetch live exchange rates:', error);
+
+    const memoryRates = getMemoryRates();
+    if (memoryRates) {
+      return {
+        rates: memoryRates.rates,
+        ratesSource: `memory-${memoryRates.source || 'cached'}`
+      };
+    }
+
+    const persistentRates = await readPersistentRatesCache();
+    if (persistentRates?.rates) {
+      setMemoryRatesCache(persistentRates.rates, 'persistent', persistentRates.updatedAt);
+      return {
+        rates: persistentRates.rates,
+        ratesSource: 'persistent'
+      };
+    }
+
+    throw new Error(`Unable to resolve exchange rates. ${error.message}`);
+  }
+};
+
+const loadFreshPricing = async () => {
+  const [ratesResult, applePricing] = await Promise.all([
+    resolveExchangeRates(),
+    fetchApplePricingHtml()
+  ]);
+
+  const data = parsePricingHtml(applePricing.html, ratesResult.rates);
+
+  if (data.length === 0) {
+    throw new Error('Apple pricing page parsed successfully but no pricing data was found.');
+  }
+
+  const payload = createResponsePayload(data, {
+    updatedAt: new Date().toISOString(),
+    resolvedSource: applePricing.sourceUrl,
+    cacheStatus: 'fresh',
+    ratesSource: ratesResult.ratesSource
+  });
+
+  setMemoryCache(payload);
+  await writePersistentPricingCache(payload);
+  return payload;
+};
+
+const serveFallbackChain = async (error, persistentPayload) => {
+  const stalePayload = getStaleCache();
+  if (stalePayload) {
+    return { status: 200, cacheControl: 's-maxage=300, stale-while-revalidate=3600', body: stalePayload };
+  }
+
+  const stalePersistentPayload = decoratePersistentCache(
+    persistentPayload || await readPersistentPricingCache(),
+    { stale: true }
+  );
+  if (stalePersistentPayload) {
+    setMemoryCache(stalePersistentPayload, new Date(stalePersistentPayload.updatedAt).getTime());
+    return {
+      status: 200,
+      cacheControl: 's-maxage=300, stale-while-revalidate=3600',
+      body: stalePersistentPayload
+    };
+  }
+
+  const fallbackPayload = createResponsePayload(cloneData(fallbackPricingData), {
+    updatedAt: FALLBACK_UPDATED_AT,
+    cacheStatus: 'fallback',
+    isFallback: true,
+    message: `Live pricing fetch failed. Serving bundled fallback data. ${error.message}`
+  });
+
+  return {
+    status: 200,
+    cacheControl: 's-maxage=300, stale-while-revalidate=3600',
+    body: fallbackPayload
+  };
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -166,55 +289,72 @@ export default async function handler(req, res) {
     return res.status(200).json(validPersistentPayload);
   }
 
-  try {
-    const [rateData, applePricing] = await Promise.all([
-      fetchJson(EXCHANGE_RATE_URL),
-      fetchApplePricingHtml()
-    ]);
-
-    const data = parsePricingHtml(applePricing.html, rateData.rates || {});
-
-    if (data.length === 0) {
-      throw new Error('Apple pricing page parsed successfully but no pricing data was found.');
+  // 强制刷新：冷却期内直接返回现有缓存，避免击穿上游
+  if (shouldRefresh && Date.now() < memoryRefreshLockUntil) {
+    const cooldownPersistent = await readPersistentPricingCache();
+    const cooldownPayload = getValidCache()
+      || getStaleCache()
+      || decoratePersistentCache(cooldownPersistent)
+      || decoratePersistentCache(cooldownPersistent, { stale: true });
+    if (cooldownPayload) {
+      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=300');
+      return res.status(200).json({
+        ...cooldownPayload,
+        message: cooldownPayload.message || 'Refresh cooldown active. Serving cached data.'
+      });
     }
+  }
 
-    const payload = createResponsePayload(data, {
-      updatedAt: new Date().toISOString(),
-      resolvedSource: applePricing.sourceUrl,
-      cacheStatus: 'fresh'
-    });
+  // 单实例 in-flight 合并
+  if (inFlightRefresh) {
+    try {
+      const payload = await inFlightRefresh;
+      res.setHeader('Cache-Control', shouldRefresh ? 'no-store' : 's-maxage=21600, stale-while-revalidate=86400');
+      return res.status(200).json(payload);
+    } catch (error) {
+      const fallback = await serveFallbackChain(error, persistentPayload);
+      res.setHeader('Cache-Control', fallback.cacheControl);
+      return res.status(fallback.status).json(fallback.body);
+    }
+  }
 
-    setMemoryCache(payload);
-    await writePersistentPricingCache(payload);
+  const lockAcquired = shouldRefresh ? await acquireRefreshLock() : true;
+  if (shouldRefresh && !lockAcquired) {
+    const lockedPersistent = await readPersistentPricingCache();
+    const lockedPayload = getValidCache()
+      || getStaleCache()
+      || decoratePersistentCache(lockedPersistent)
+      || decoratePersistentCache(lockedPersistent, { stale: true });
+    if (lockedPayload) {
+      res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=300');
+      return res.status(200).json({
+        ...lockedPayload,
+        message: lockedPayload.message || 'Another refresh is in progress. Serving cached data.'
+      });
+    }
+  }
+
+  inFlightRefresh = (async () => {
+    try {
+      return await loadFreshPricing();
+    } finally {
+      if (shouldRefresh) {
+        memoryRefreshLockUntil = Date.now() + REFRESH_COOLDOWN_MS;
+        await releaseRefreshLock();
+      }
+    }
+  })();
+
+  try {
+    const payload = await inFlightRefresh;
     res.setHeader('Cache-Control', shouldRefresh ? 'no-store' : 's-maxage=21600, stale-while-revalidate=86400');
     return res.status(200).json(payload);
   } catch (error) {
     console.error('Failed to load pricing data:', error);
-
-    const stalePayload = getStaleCache();
-    if (stalePayload) {
-      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
-      return res.status(200).json(stalePayload);
-    }
-
-    const stalePersistentPayload = decoratePersistentCache(
-      persistentPayload || await readPersistentPricingCache(),
-      { stale: true }
-    );
-    if (stalePersistentPayload) {
-      setMemoryCache(stalePersistentPayload, new Date(stalePersistentPayload.updatedAt).getTime());
-      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
-      return res.status(200).json(stalePersistentPayload);
-    }
-
-    const fallbackPayload = createResponsePayload(cloneData(fallbackPricingData), {
-      updatedAt: FALLBACK_UPDATED_AT,
-      cacheStatus: 'fallback',
-      isFallback: true,
-      message: `Live pricing fetch failed. Serving bundled fallback data. ${error.message}`
-    });
-
-    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=3600');
-    return res.status(200).json(fallbackPayload);
+    const fallback = await serveFallbackChain(error, persistentPayload);
+    res.setHeader('Cache-Control', fallback.cacheControl);
+    return res.status(fallback.status).json(fallback.body);
+  } finally {
+    inFlightRefresh = null;
   }
 }

@@ -5,15 +5,6 @@ export default {
     "./index.html",
     "./src/**/*.{vue,js,ts,jsx,tsx}",
   ],
-  safelist: [
-    'dark',
-    'dark:bg-black',
-    'dark:text-white',
-    'dark:bg-gray-900',
-    'dark:text-gray-100',
-    'dark:bg-apple-dark-bg',
-    'dark:text-apple-gray'
-  ],
   theme: {
     extend: {
       fontFamily: {

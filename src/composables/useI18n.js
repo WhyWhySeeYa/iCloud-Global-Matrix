@@ -24,8 +24,6 @@ export function useI18n() {
     }
   };
 
-  setLocale(locale.value);
-
   return {
     locale,
     availableLocales: SUPPORTED_LOCALES,

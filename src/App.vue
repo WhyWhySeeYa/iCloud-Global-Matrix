@@ -3,7 +3,7 @@
  * @file App.vue
  * @description 主应用组件，负责视图渲染和组合各个业务逻辑 Hook
  */
-import { computed, ref, onMounted } from 'vue';
+import { computed, nextTick, ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useTheme } from './composables/useTheme.js';
 import { usePricingData } from './composables/usePricingData.js';
@@ -17,6 +17,7 @@ import PricingTable from './components/PricingTable.vue';
 // --- DOM 引用 ---
 const tableContainer = ref(null); // 表格 DOM 容器的引用，用于截图导出
 const exporting = ref(false);
+const exportingImage = ref(false);
 
 // --- 组合式 API (Hooks) 引入 ---
 
@@ -29,41 +30,21 @@ const { isDark, toggleTheme } = useTheme();
 const appTitle = computed(() => import.meta.env.VITE_APP_TITLE || t('appTitle'));
 const heroTitle = computed(() => import.meta.env.VITE_HERO_TITLE || t('heroTitle'));
 const heroSubtitle = computed(() => import.meta.env.VITE_HERO_SUBTITLE || t('heroSubtitle'));
-const pricingTableLabels = computed(() => ({
-  region: t('region'),
-  currency: t('currency'),
-  bestPrice: t('bestPrice'),
-  searchPlaceholder: t('searchPlaceholder'),
-  allPlans: t('allPlans'),
-  allCurrencies: t('allCurrencies'),
-  onlyBestPrices: t('onlyBestPrices'),
-  resetFilters: t('resetFilters'),
-  visibleRows: t('visibleRows'),
-  totalRows: t('totalRows'),
-  noMatchingData: t('noMatchingData'),
-  exportCsv: t('exportCsv'),
-  exportJson: t('exportJson'),
-  exporting: t('exporting'),
-  filters: t('filters'),
-  showFilters: t('showFilters'),
-  hideFilters: t('hideFilters'),
-  refreshPricing: t('refreshPricing'),
-  refreshingPricingData: t('refreshingPricingData')
-}));
 
 // 3. 核心业务数据逻辑 (获取、解析、排序)
-const { 
-  loading, 
+const {
+  loading,
   refreshing,
-  loadingText, 
-  error, 
-  sortTier, 
-  isAsc, 
-  sortedData, 
+  loadingText,
+  error,
+  sortTier,
+  isAsc,
+  sortedData,
   bestPrices,
   meta,
   fetchData,
-  toggleSort
+  toggleSort,
+  setSortState
 } = usePricingData(t);
 
 const localizedSortedData = computed(() => sortedData.value.map((item) => ({
@@ -86,23 +67,36 @@ const { saveAsImage, saveAsCsv, saveAsJson } = useExport();
  * 触发图片导出
  * 将 DOM 引用和当前主题状态传递给导出 Hook
  */
-const runExport = async (task) => {
+const waitForPaint = () => new Promise((resolve) => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(resolve);
+  });
+});
+
+const runExport = async (task, { expandTable = false } = {}) => {
   if (exporting.value) return;
 
   exporting.value = true;
+  exportingImage.value = expandTable;
   try {
+    // 图片导出前展开全量筛选结果，与 CSV/JSON 数据范围对齐
+    if (expandTable) {
+      await nextTick();
+      await waitForPaint();
+    }
     await task();
     ElMessage.success(t('exportSuccess'));
-  } catch (error) {
-    console.error('导出失败:', error);
+  } catch (err) {
+    console.error('导出失败:', err);
     ElMessage.error(t('exportFailed'));
   } finally {
     exporting.value = false;
+    exportingImage.value = false;
   }
 };
 
 const handleExport = () => {
-  runExport(() => saveAsImage(tableContainer.value, isDark.value));
+  runExport(() => saveAsImage(tableContainer.value, isDark.value), { expandTable: true });
 };
 
 const handleExportCsv = ({ data, tiers }) => {
@@ -118,6 +112,14 @@ const handleRefresh = async () => {
   if (success) ElMessage.success(t('refreshSuccess'));
 };
 
+const handleRetry = async () => {
+  await fetchData();
+};
+
+const handleSetSort = ({ tier, asc }) => {
+  setSortState(tier, asc);
+};
+
 // --- 生命周期钩子 ---
 
 // 组件挂载完成后，自动触发数据抓取流程
@@ -128,9 +130,9 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] transition-colors duration-300 selection:bg-[#0071e3]/30">
-    
+
     <!-- 顶部导航栏 -->
-    <AppHeader 
+    <AppHeader
       :is-dark="isDark"
       :app-title="appTitle"
       :export-label="t('export')"
@@ -153,21 +155,23 @@ onMounted(() => {
 
       <!-- 价格表格区域 (用于截图导出的容器) -->
       <div ref="tableContainer">
-        <PricingTable 
+        <PricingTable
           :data="localizedSortedData"
           :loading="loading"
           :loading-text="loadingText"
           :refreshing="refreshing"
           :exporting="exporting"
+          :exporting-image="exportingImage"
           :error="error"
           :sort-tier="sortTier"
           :is-asc="isAsc"
           :best-prices="bestPrices"
-          :labels="pricingTableLabels"
           @toggle-sort="toggleSort"
+          @set-sort="handleSetSort"
           @export-csv="handleExportCsv"
           @export-json="handleExportJson"
           @refresh="handleRefresh"
+          @retry="handleRetry"
         />
       </div>
 
@@ -176,6 +180,7 @@ onMounted(() => {
         <p>{{ t('dataSource') }}</p>
         <p v-if="meta" class="mt-1">
           {{ t('lastUpdated') }}: {{ new Date(meta.updatedAt).toLocaleString(locale) }} · {{ t('dataStatus') }}: {{ dataStatusLabel }}
+          <template v-if="meta.countryCount"> · {{ t('region') }}: {{ meta.countryCount }}</template>
         </p>
         <p v-if="meta?.message" class="mt-1 text-amber-600 dark:text-amber-400">{{ meta.message }}</p>
       </footer>
